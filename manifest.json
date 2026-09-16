@@ -2,15 +2,24 @@
   "schemaVersion": 1,
   "id": "vincentritter.omarain",
   "name": "Omarain",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Vincent Ritter",
   "license": "MIT",
   "homepage": "https://github.com/vincentritter/omarchy-omarain",
-  "description": "Sparse pixel rain over the wallpaper, using the current theme palette",
+  "description": "Sparse pixel rain over the wallpaper, with intensity and weather-tinted auto",
   "kinds": [
-    "service"
+    "service",
+    "bar-widget"
   ],
   "entryPoints": {
-    "service": "Service.qml"
+    "service": "Service.qml",
+    "barWidget": "Omarain.qml"
+  },
+  "barWidget": {
+    "displayName": "Omarain",
+    "description": "Pixel rain intensity over the wallpaper",
+    "category": "Desktop",
+    "allowMultiple": false,
+    "defaultSection": "right"
   }
 }
