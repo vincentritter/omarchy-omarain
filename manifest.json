@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "vincentritter.omarain",
+  "name": "Omarain",
+  "version": "1.0.0",
+  "author": "Vincent Ritter",
+  "license": "MIT",
+  "homepage": "https://github.com/vincentritter/omarchy-omarain",
+  "description": "Sparse pixel rain over the wallpaper, using the current theme palette",
+  "kinds": [
+    "service"
+  ],
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}
