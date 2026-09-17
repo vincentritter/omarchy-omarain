@@ -285,7 +285,7 @@ Item {
       }
 
       FrameAnimation {
-        running: panel.sim !== null && panel.visible && root.mode !== "off"
+        running: panel.sim !== null && panel.visible && (root.mode !== "off" || (panel.tick >= 0 && RainModel.hasLive(panel.sim)))
         onTriggered: {
           var dt = frameTime
           if (!(dt > 0) || dt > 0.05) dt = 1 / 60

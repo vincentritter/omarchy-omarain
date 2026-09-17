@@ -234,12 +234,19 @@ test("heavier intensity packs more drops onto the same width", () => {
   assert.ok(steady < heavy)
 })
 
-test("off culls falling drops", () => {
-  const state = RainModel.createState(800, 600, { seed: 1 })
-  assert.ok(ofKind(state, "drop").length > 0)
+test("off stops spawning but lets falling drops finish", () => {
+  const state = RainModel.createState(800, 600, { seed: 1, mode: "steady" })
+  const before = ofKind(state, "drop").length
+  assert.ok(before > 0)
   RainModel.setMode(state, "off")
   assert.equal(state.dropTarget, 0)
+  assert.equal(state.dropTargetGoal, 0)
+  assert.equal(ofKind(state, "drop").length, before)
+  RainModel.step(state, 0.05)
+  assert.ok(ofKind(state, "drop").length <= before)
+  for (var i = 0; i < 400; i++) RainModel.step(state, 0.05)
   assert.equal(ofKind(state, "drop").length, 0)
+  assert.equal(RainModel.hasLive(state), false)
 })
 
 test("auto step retargets the field as the wander moves", () => {

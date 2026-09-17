@@ -651,6 +651,14 @@ function splashFrom(state, drop) {
   collectPuddle(state, drop, originX, originY, size)
 }
 
+function hasLive(state) {
+  if (!state || !state.cells) return false
+  for (var i = 0; i < state.cells.length; i++) {
+    if (state.cells[i].alive) return true
+  }
+  return false
+}
+
 function liveDropTarget(state) {
   return Math.round(state.dropTarget || 0)
 }
@@ -678,20 +686,19 @@ function applyIntensity(state, intensity, immediate) {
   state.intensity = intensity
   state.dropTargetGoal = dropTargetFor(state.width, intensity)
   ensurePool(state)
-  if (immediate || state.dropTargetGoal === 0) {
+  if (immediate) {
     state.dropTarget = state.dropTargetGoal
     cullExtraDrops(state)
     maintainDrops(state)
+    return
   }
+  if (state.dropTargetGoal === 0) state.dropTarget = 0
 }
 
 function easeDropTarget(state, dt) {
   var goal = state.dropTargetGoal
   if (goal === 0) {
-    if (state.dropTarget !== 0) {
-      state.dropTarget = 0
-      cullExtraDrops(state)
-    }
+    state.dropTarget = 0
     return
   }
   if (state.dropTarget === goal) return
@@ -886,6 +893,7 @@ if (typeof module !== "undefined") {
     spawnDrop: spawnDrop,
     step: step,
     resize: resize,
+    hasLive: hasLive,
     setMode: setMode,
     setSpeed: setSpeed,
     setWeatherCode: setWeatherCode,
