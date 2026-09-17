@@ -416,7 +416,7 @@ function blankCell() {
 
 function ensurePool(state) {
   var n = Math.max(Math.round(state.dropTarget || 0), Math.round(state.dropTargetGoal || 0))
-  var needed = n + n * 10
+  var needed = n + Math.max(48, Math.round(n * 1.25))
   while (state.cells.length < needed) state.cells.push(blankCell())
 }
 

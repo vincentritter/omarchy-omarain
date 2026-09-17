@@ -201,7 +201,7 @@ Item {
   }
 
   Timer {
-    interval: 200
+    interval: 500
     running: true
     repeat: true
     onTriggered: modeFile.reload()
@@ -220,7 +220,7 @@ Item {
       required property var modelData
 
       property var sim: null
-      property int tick: 0
+      property bool draining: false
 
       screen: modelData
       visible: !remapGuard.remapping
@@ -284,59 +284,69 @@ Item {
         function onScriptChanged() { panel.applyConfig() }
       }
 
+      function cssColor(role, alpha, tint) {
+        var c = root.fillFor(role, alpha, tint)
+        if (!c) return "transparent"
+        if (typeof c === "string") return c
+        return "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + c.a + ")"
+      }
+
+      function paintCells(ctx) {
+        if (!sim) return
+        var cells = sim.cells
+        var glyphs = root.useGlyphs
+        var fontFamily = Style.font.family
+        var gs = 11
+        ctx.imageSmoothingEnabled = false
+        ctx.textBaseline = "top"
+        ctx.font = gs + "px \"" + fontFamily + "\""
+        for (var pass = 0; pass <= 3; pass++) {
+          for (var i = 0; i < cells.length; i++) {
+            var cell = cells[i]
+            if (!cell.alive || cell.alpha <= 0.02) continue
+            var isDrop = cell.kind === "drop"
+            if (isDrop && (cell.layer || 0) !== pass) continue
+            if (!isDrop && pass !== 3) continue
+            if (glyphs && isDrop) {
+              var trail = cell.trailGlyphs || cell.glyph || ""
+              var n = Math.max(1, trail.length)
+              var x = cell.x
+              var y = cell.y + cell.h - n * gs
+              for (var g = 0; g < n; g++) {
+                var role = g === n - 1 ? "accent" : (g > n - 3 ? "foreground" : "muted")
+                ctx.fillStyle = cssColor(role, cell.alpha * ((g + 1) / n), cell.tint)
+                ctx.fillText(trail.charAt(g), x, y + g * gs)
+              }
+              continue
+            }
+            ctx.fillStyle = cssColor(cell.role, cell.alpha, cell.tint)
+            ctx.fillRect(cell.x, cell.y, cell.w, cell.h)
+          }
+        }
+      }
+
       FrameAnimation {
-        running: panel.sim !== null && panel.visible && (root.mode !== "off" || (panel.tick >= 0 && RainModel.hasLive(panel.sim)))
+        running: panel.sim !== null && panel.visible && (root.mode !== "off" || panel.draining)
         onTriggered: {
           var dt = frameTime
           if (!(dt > 0) || dt > 0.05) dt = 1 / 60
           RainModel.step(panel.sim, dt)
-          panel.tick++
+          panel.draining = RainModel.hasLive(panel.sim)
+          canvas.requestPaint()
         }
       }
 
-      Repeater {
-        model: panel.sim && panel.tick >= 0 ? panel.sim.cells.length : 0
-
-        Item {
-          id: dropItem
-          required property int index
-          readonly property var cell: panel.sim ? panel.sim.cells[index] : null
-          readonly property string glyphTrail: panel.tick >= 0 && cell && cell.trailGlyphs ? cell.trailGlyphs : (cell && cell.glyph ? cell.glyph : "")
-          readonly property int glyphSize: 11
-          readonly property bool glyphDrop: root.useGlyphs && !!(cell && cell.kind === "drop")
-          visible: panel.tick >= 0 && !!(cell && cell.alive && cell.alpha > 0.02)
-          x: panel.tick >= 0 && cell ? cell.x : 0
-          y: panel.tick >= 0 && cell ? (glyphDrop ? cell.y + cell.h - Math.max(1, glyphTrail.length) * glyphSize : cell.y) : 0
-          width: panel.tick >= 0 && cell ? (glyphDrop ? glyphSize : cell.w) : 0
-          height: panel.tick >= 0 && cell ? (glyphDrop ? Math.max(1, glyphTrail.length) * glyphSize : cell.h) : 0
-          z: panel.tick >= 0 && cell ? cell.layer : 0
-
-          Rectangle {
-            anchors.fill: parent
-            visible: !dropItem.glyphDrop
-            color: root.look && panel.tick >= 0 ? root.fillFor(cell ? cell.role : "muted", cell ? cell.alpha : 0, cell ? cell.tint : "") : "transparent"
-            antialiasing: false
-          }
-
-          Repeater {
-            model: 10
-            Text {
-              required property int index
-              visible: dropItem.glyphDrop && index < dropItem.glyphTrail.length
-              y: index * dropItem.glyphSize
-              width: dropItem.glyphSize
-              height: dropItem.glyphSize
-              text: dropItem.glyphTrail.charAt(index)
-              color: root.fillFor(
-                index === dropItem.glyphTrail.length - 1 ? "accent" : (index > dropItem.glyphTrail.length - 3 ? "foreground" : "muted"),
-                (dropItem.cell ? dropItem.cell.alpha : 1) * ((index + 1) / Math.max(1, dropItem.glyphTrail.length)),
-                dropItem.cell ? dropItem.cell.tint : ""
-              )
-              font.family: Style.font.family
-              font.pixelSize: dropItem.glyphSize
-              textFormat: Text.PlainText
-            }
-          }
+      Canvas {
+        id: canvas
+        anchors.fill: parent
+        renderTarget: Canvas.FramebufferObject
+        renderStrategy: Canvas.Cooperative
+        contextType: "2d"
+        onPaint: {
+          var ctx = getContext("2d")
+          if (!ctx) return
+          ctx.clearRect(0, 0, width, height)
+          panel.paintCells(ctx)
         }
       }
     }
