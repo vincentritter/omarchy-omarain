@@ -21,6 +21,7 @@ Item {
   property string speed: "calm"
   property string look: "theme"
   property string script: "pixels"
+  property string resumeMode: "auto"
   readonly property bool useGlyphs: RainModel.usesGlyphs(look, script)
   property var weatherCode: null
   property real windX: 0
@@ -52,6 +53,11 @@ Item {
 
   function setMode(next) {
     var mode = RainModel.normalizeMode(next)
+    if (mode === "off") {
+      if (root.mode !== "off") root.resumeMode = root.mode
+    } else {
+      root.resumeMode = mode
+    }
     if (mode === root.mode) {
       persistMode()
       return
@@ -100,7 +106,7 @@ Item {
   function persistMode() {
     if (!root.modeLoaded) return
     if (!mkdirProc.running) mkdirProc.running = true
-    modeFile.setText(RainModel.stateFileBody(root.mode, root.weatherCode, root.speed, root.look, root.script))
+    modeFile.setText(RainModel.stateFileBody(root.mode, root.weatherCode, root.speed, root.look, root.script, root.resumeMode))
   }
 
   function applyWeather(raw) {
@@ -152,6 +158,7 @@ Item {
       root.speed = next.speed
       root.look = next.look
       root.script = next.script
+      root.resumeMode = next.resumeMode
       root.modeLoaded = true
       if (dirty) root.bumpConfig()
     }

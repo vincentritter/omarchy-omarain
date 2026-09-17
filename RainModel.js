@@ -276,7 +276,7 @@ function parseLocationFile(raw) {
 }
 
 function parseStateFile(raw) {
-  var out = { mode: "auto", weatherCode: null, speed: "calm", look: "theme", script: "pixels" }
+  var out = { mode: "auto", weatherCode: null, speed: "calm", look: "theme", script: "pixels", resumeMode: "auto" }
   try {
     var data = JSON.parse(String(raw || ""))
     if (!data || typeof data !== "object") return out
@@ -291,6 +291,9 @@ function parseStateFile(raw) {
       var code = Number(data.weatherCode)
       if (isFinite(code)) out.weatherCode = code
     }
+    var resume = normalizeMode(data.resumeMode)
+    out.resumeMode = resume === "off" ? "auto" : resume
+    if (out.mode !== "off") out.resumeMode = out.mode
     return out
   } catch (e) {
     return out
@@ -301,21 +304,26 @@ function parseModeFile(raw) {
   return parseStateFile(raw).mode
 }
 
-function stateFileBody(mode, weatherCode, speed, look, script) {
-  var body = "{\n  \"mode\": \"" + normalizeMode(mode) + "\""
+function stateFileBody(mode, weatherCode, speed, look, script, resumeMode) {
+  var nextMode = normalizeMode(mode)
+  var resume = normalizeMode(resumeMode)
+  if (resume === "off") resume = "auto"
+  if (nextMode !== "off") resume = nextMode
+  var body = "{\n  \"mode\": \"" + nextMode + "\""
   if (weatherCode != null && isFinite(Number(weatherCode)))
     body += ",\n  \"weatherCode\": " + Number(weatherCode)
   body += ",\n  \"speed\": \"" + normalizeSpeed(speed) + "\""
   body += ",\n  \"look\": \"" + normalizeLook(look) + "\""
   body += ",\n  \"script\": \"" + normalizeScript(script) + "\""
+  body += ",\n  \"resumeMode\": \"" + resume + "\""
   return body + "\n}\n"
 }
 
 function modeFileBody(mode) {
-  return stateFileBody(mode, null, "calm", "theme", "pixels")
+  return stateFileBody(mode, null, "calm", "theme", "pixels", mode)
 }
 
-function mergeState(raw, mode, weatherCode, speed, look, script) {
+function mergeState(raw, mode, weatherCode, speed, look, script, resumeMode) {
   var current = parseStateFile(raw)
   var nextMode = mode === undefined || mode === null || mode === "" ? current.mode : normalizeMode(mode)
   var nextCode = weatherCode != null && weatherCode !== "" && isFinite(Number(weatherCode))
@@ -324,7 +332,27 @@ function mergeState(raw, mode, weatherCode, speed, look, script) {
   var nextSpeed = speed === undefined || speed === null || speed === "" ? current.speed : normalizeSpeed(speed)
   var nextLook = look === undefined || look === null || look === "" ? current.look : normalizeLook(look)
   var nextScript = script === undefined || script === null || script === "" ? current.script : normalizeScript(script)
-  return { mode: nextMode, weatherCode: nextCode, speed: nextSpeed, look: nextLook, script: nextScript }
+  var nextResume = resumeMode === undefined || resumeMode === null || resumeMode === ""
+    ? current.resumeMode
+    : normalizeMode(resumeMode)
+  if (nextResume === "off") nextResume = "auto"
+  if (nextMode !== "off") nextResume = nextMode
+  return {
+    mode: nextMode,
+    weatherCode: nextCode,
+    speed: nextSpeed,
+    look: nextLook,
+    script: nextScript,
+    resumeMode: nextResume
+  }
+}
+
+function toggleOnOff(mode, resumeMode) {
+  mode = normalizeMode(mode)
+  var resume = normalizeMode(resumeMode)
+  if (resume === "off") resume = "auto"
+  if (mode === "off") return { mode: resume, resumeMode: resume }
+  return { mode: "off", resumeMode: mode }
 }
 
 function cycleMode(mode) {
@@ -949,6 +977,7 @@ if (typeof module !== "undefined") {
     parseStateFile: parseStateFile,
     parseModeFile: parseModeFile,
     mergeState: mergeState,
+    toggleOnOff: toggleOnOff,
     stateFileBody: stateFileBody,
     modeFileBody: modeFileBody,
     forecastUrl: forecastUrl,

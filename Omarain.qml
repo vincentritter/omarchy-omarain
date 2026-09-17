@@ -21,6 +21,7 @@ Panel {
   property string speed: "calm"
   property string look: "theme"
   property string script: "pixels"
+  property string resumeMode: "auto"
   property double matrixClickAt: 0
   property var weatherCode: null
   property int cursorIndex: 0
@@ -60,12 +61,13 @@ Panel {
     root.speed = merged.speed
     root.look = merged.look
     root.script = merged.script
+    root.resumeMode = merged.resumeMode
     root.weatherCode = merged.weatherCode
     cursorIndex = selectedIndex()
     speedIndex = selectedSpeedIndex()
     lookIndex = selectedLookIndex()
     if (!mkdirProc.running) mkdirProc.running = true
-    modeFile.setText(RainModel.stateFileBody(merged.mode, merged.weatherCode, merged.speed, merged.look, merged.script))
+    modeFile.setText(RainModel.stateFileBody(merged.mode, merged.weatherCode, merged.speed, merged.look, merged.script, merged.resumeMode))
   }
 
   function selectedLookIndex() {
@@ -118,6 +120,14 @@ Panel {
 
   function cycleMode() {
     setMode(RainModel.cycleMode(mode))
+  }
+
+  function toggleRain() {
+    var next = RainModel.toggleOnOff(root.mode, root.resumeMode)
+    var merged = RainModel.mergeState(modeFile.text(), next.mode, root.weatherCode, root.speed, root.look, root.script, next.resumeMode)
+    persistMerged(merged)
+    if (sharedService && typeof sharedService.setMode === "function")
+      sharedService.setMode(merged.mode)
   }
 
   function moveCursor(dx, dy) {
@@ -182,6 +192,7 @@ Panel {
     function setSpeed(speed: string): void { root.setSpeed(speed) }
     function setLook(look: string): void { root.setLook(look) }
     function cycle(): void { root.cycleMode() }
+    function toggleRain(): void { root.toggleRain() }
   }
 
   Process {
@@ -208,6 +219,7 @@ Panel {
       root.look = next.look
       if (!root.opened) root.lookIndex = root.selectedLookIndex()
       root.script = next.script
+      root.resumeMode = next.resumeMode
     }
     onLoadFailed: root.mode = "auto"
   }
@@ -274,7 +286,7 @@ Panel {
     tooltipText: "Omarain"
     dimmed: root.mode === "off"
     onPressed: function(b) {
-      if (b === Qt.RightButton || b === Qt.MiddleButton) root.cycleMode()
+      if (b === Qt.RightButton) root.toggleRain()
       else root.toggle()
     }
   }

@@ -342,10 +342,23 @@ test("mode file stores a known mode", () => {
   assert.equal(RainModel.parseStateFile('{"look":"matrix"}').script, "glyphs")
   assert.equal(RainModel.parseStateFile("").script, "pixels")
   assert.equal(RainModel.parseStateFile('{"script":"glyphs"}').script, "glyphs")
+  assert.equal(RainModel.parseStateFile('{"mode":"off","resumeMode":"heavy"}').resumeMode, "heavy")
+  assert.equal(RainModel.parseStateFile("").resumeMode, "auto")
   assert.equal(
-    RainModel.stateFileBody("heavy", 80, "calm", "theme", "pixels"),
-    '{\n  "mode": "heavy",\n  "weatherCode": 80,\n  "speed": "calm",\n  "look": "theme",\n  "script": "pixels"\n}\n'
+    RainModel.stateFileBody("heavy", 80, "calm", "theme", "pixels", "heavy"),
+    '{\n  "mode": "heavy",\n  "weatherCode": 80,\n  "speed": "calm",\n  "look": "theme",\n  "script": "pixels",\n  "resumeMode": "heavy"\n}\n'
   )
+})
+
+test("right-click toggles off and restores the last intensity", () => {
+  const off = RainModel.toggleOnOff("steady", "auto")
+  assert.equal(off.mode, "off")
+  assert.equal(off.resumeMode, "steady")
+  const on = RainModel.toggleOnOff("off", "torrential")
+  assert.equal(on.mode, "torrential")
+  assert.equal(on.resumeMode, "torrential")
+  const fromOffDefault = RainModel.toggleOnOff("off", "off")
+  assert.equal(fromOffDefault.mode, "auto")
 })
 
 test("mergeState keeps an existing weather code when a mode write omits it", () => {
