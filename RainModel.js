@@ -158,17 +158,19 @@ function normalizeMode(value) {
 
 function weatherTint(code) {
   var c = parseInt(String(code), 10)
-  if (!isFinite(c)) return 1
-  if (c >= 95) return 1.7
-  if (c >= 80) return 1.5
-  if (c >= 71) return 1.1
-  if (c >= 61) return 1.35
-  if (c >= 51) return 1.15
-  if (c >= 45) return 0.95
-  if (c >= 3) return 0.85
-  if (c >= 2) return 0.85
-  if (c >= 0) return 0.7
-  return 1
+  if (!isFinite(c)) return 0.28
+  if (c >= 95) return 2.4
+  if (c >= 82) return 1.9
+  if (c >= 80) return 1.15
+  if (c >= 71) return 0.7
+  if (c >= 65) return 1.8
+  if (c >= 61) return 1.1
+  if (c >= 51) return 0.5
+  if (c >= 45) return 0.26
+  if (c >= 3) return 0.18
+  if (c >= 2) return 0.16
+  if (c >= 1) return 0.12
+  return 0.1
 }
 
 function wanderAt(elapsed) {
@@ -182,7 +184,7 @@ function resolveIntensity(mode, weatherCode, elapsed) {
   if (mode === "heavy") return 3.4
   if (mode === "torrential") return 8
   if (mode === "steady") return 1
-  return clamp(1.35 * weatherTint(weatherCode) * wanderAt(elapsed), 0.75, 2.6)
+  return clamp(weatherTint(weatherCode) * wanderAt(elapsed), 0.08, 3.2)
 }
 
 function dropTargetFor(width, intensity) {
@@ -228,7 +230,7 @@ function windXFromPayload(raw) {
     }
     if (!isFinite(speed) || speed === 0) return 0
     if (!isFinite(fromDeg)) fromDeg = 0
-    return -speed * Math.sin(fromDeg * Math.PI / 180) * 1.15
+    return -speed * Math.sin(fromDeg * Math.PI / 180) * 3.6
   } catch (e) {
     return 0
   }
@@ -236,8 +238,8 @@ function windXFromPayload(raw) {
 
 function layerWind(layer) {
   if (layer === 0) return 1
-  if (layer === 1) return 0.4
-  return 0.12
+  if (layer === 1) return 0.58
+  return 0.28
 }
 
 function weatherCodeFromPayload(raw) {

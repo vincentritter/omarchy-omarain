@@ -15,7 +15,7 @@ test("snapToGrid lands on the pixel grid", () => {
 test("createState sizes a sparse drop field from the screen width", () => {
   const small = RainModel.createState(800, 600, { seed: 1 })
   const wide = RainModel.createState(1920, 1080, { seed: 1 })
-  assert.ok(small.dropTarget >= 6)
+  assert.ok(small.dropTarget >= 2)
   assert.ok(wide.dropTarget > small.dropTarget)
   assert.ok(wide.dropTarget < 80)
   assert.equal(small.pixel, 3)
@@ -66,11 +66,11 @@ test("near drops fall faster than far drops", () => {
 })
 
 test("a slice of drops use the accent role", () => {
-  const state = RainModel.createState(1920, 1080, { seed: 3 })
+  const state = RainModel.createState(1920, 1080, { seed: 3, mode: "steady" })
   const drops = ofKind(state, "drop")
   const accents = drops.filter(function (drop) { return drop.role === "accent" })
   assert.ok(accents.length >= 1)
-  assert.ok(accents.length < drops.length * 0.4)
+  assert.ok(accents.length < drops.length * 0.55)
 })
 
 test("step moves drops downward", () => {
@@ -211,13 +211,22 @@ test("fixed modes keep a constant intensity", () => {
 test("clear weather tints auto quieter than a storm, never off", () => {
   const clear = RainModel.resolveIntensity("auto", 0, 0)
   const storm = RainModel.resolveIntensity("auto", 95, 0)
-  assert.ok(clear >= 0.7)
+  assert.ok(clear > 0)
+  assert.ok(clear < 0.3)
   assert.ok(storm > clear)
-  assert.ok(storm <= 2.6)
+  assert.ok(storm > 1)
 })
 
-test("auto with no weather is denser than steady", () => {
-  assert.ok(RainModel.resolveIntensity("auto", null, 0) > RainModel.resolveIntensity("steady"))
+test("overcast auto is a few specks, not a curtain", () => {
+  const overcast = RainModel.resolveIntensity("auto", 3, 0)
+  const showers = RainModel.resolveIntensity("auto", 80, 0)
+  assert.ok(overcast < RainModel.resolveIntensity("light"))
+  assert.ok(overcast < 0.3)
+  assert.ok(showers > overcast)
+})
+
+test("auto with unknown weather stays a quiet living field", () => {
+  assert.ok(RainModel.resolveIntensity("auto", null, 0) < RainModel.resolveIntensity("steady"))
 })
 
 test("auto wander breathes intensity over time", () => {
@@ -252,7 +261,7 @@ test("off stops spawning but lets falling drops finish", () => {
 })
 
 test("auto step retargets the field as the wander moves", () => {
-  const state = RainModel.createState(1800, 900, { seed: 2, mode: "auto" })
+  const state = RainModel.createState(1800, 900, { seed: 2, mode: "auto", weatherCode: 95 })
   const start = state.dropTarget
   for (var i = 0; i < 800; i++) RainModel.step(state, 0.05)
   assert.notEqual(state.dropTarget, start)
@@ -274,7 +283,7 @@ test("west wind leans far drops more than near drops", () => {
   const windX = RainModel.windXFromPayload(JSON.stringify({
     current: { weather_code: 3, wind_speed_10m: 24, wind_direction_10m: 270 }
   }))
-  assert.ok(windX > 0)
+  assert.ok(windX > 50)
   const wttr = RainModel.windXFromPayload(JSON.stringify({
     current_condition: [{ weatherCode: "119", windspeedKmph: "24", winddirDegree: "270" }]
   }))
