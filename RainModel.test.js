@@ -330,6 +330,7 @@ test("mode file stores a known mode", () => {
   assert.equal(RainModel.parseStateFile("").look, "theme")
   assert.equal(RainModel.parseStateFile('{"mode":"auto","speed":"hyper"}').speed, "hyper")
   assert.equal(RainModel.parseStateFile('{"look":"matrix"}').look, "matrix")
+  assert.equal(RainModel.parseStateFile('{"look":"matrix"}').script, "glyphs")
   assert.equal(RainModel.parseStateFile("").script, "pixels")
   assert.equal(RainModel.parseStateFile('{"script":"glyphs"}').script, "glyphs")
   assert.equal(

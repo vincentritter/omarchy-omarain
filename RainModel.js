@@ -95,6 +95,10 @@ function usesGlyphs(look, script) {
   return normalizeLook(look) === "matrix" && normalizeScript(script) === "glyphs"
 }
 
+function defaultScriptForLook(look) {
+  return normalizeLook(look) === "matrix" ? "glyphs" : "pixels"
+}
+
 function pickGlyph(rng) {
   var glyphs = "█▓▒░<>/ $*!?#|"
   var roll = rng ? rng() : Math.random()
@@ -278,7 +282,10 @@ function parseStateFile(raw) {
     out.mode = normalizeMode(data.mode)
     out.speed = normalizeSpeed(data.speed)
     out.look = normalizeLook(data.look)
-    out.script = normalizeScript(data.script)
+    if (data.script == null || data.script === "")
+      out.script = defaultScriptForLook(out.look)
+    else
+      out.script = normalizeScript(data.script)
     if (data.weatherCode != null && data.weatherCode !== "") {
       var code = Number(data.weatherCode)
       if (isFinite(code)) out.weatherCode = code
@@ -750,7 +757,7 @@ function createState(width, height, options) {
     windX: options.windX == null ? 0 : Number(options.windX),
     speed: normalizeSpeed(options.speed || "calm"),
     look: normalizeLook(options.look || "theme"),
-    script: normalizeScript(options.script || "pixels"),
+    script: normalizeScript(options.script || defaultScriptForLook(options.look || "theme")),
     elapsed: 0,
     intensity: 1,
     dropTarget: 0,

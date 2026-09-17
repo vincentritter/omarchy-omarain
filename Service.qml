@@ -73,11 +73,14 @@ Item {
 
   function setLook(next) {
     var look = RainModel.normalizeLook(next)
-    if (look === root.look) {
+    var script = look === "matrix" ? "glyphs" : root.script
+    var same = look === root.look && script === root.script
+    root.look = look
+    root.script = script
+    if (same) {
       persistMode()
       return
     }
-    root.look = look
     root.bumpConfig()
     persistMode()
   }

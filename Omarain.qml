@@ -90,10 +90,14 @@ Panel {
   }
 
   function setLook(next) {
-    var merged = RainModel.mergeState(modeFile.text(), root.mode, root.weatherCode, root.speed, next, root.script)
+    var look = RainModel.normalizeLook(next)
+    var script = look === "matrix" ? "glyphs" : root.script
+    var merged = RainModel.mergeState(modeFile.text(), root.mode, root.weatherCode, root.speed, look, script)
     persistMerged(merged)
     if (sharedService && typeof sharedService.setLook === "function")
       sharedService.setLook(merged.look)
+    if (sharedService && typeof sharedService.setScript === "function")
+      sharedService.setScript(merged.script)
   }
 
   function toggleMatrixScript() {
@@ -203,7 +207,7 @@ Panel {
       if (!root.opened) root.speedIndex = root.selectedSpeedIndex()
       root.look = next.look
       if (!root.opened) root.lookIndex = root.selectedLookIndex()
-      root.script = next.script || "pixels"
+      root.script = next.script
     }
     onLoadFailed: root.mode = "auto"
   }
