@@ -17,7 +17,7 @@ test("createState sizes a sparse drop field from the screen width", () => {
   const wide = RainModel.createState(1920, 1080, { seed: 1 })
   assert.ok(small.dropTarget >= 6)
   assert.ok(wide.dropTarget > small.dropTarget)
-  assert.ok(wide.dropTarget < 40)
+  assert.ok(wide.dropTarget < 80)
   assert.equal(small.pixel, 3)
 })
 
@@ -134,11 +134,13 @@ test("fixed modes keep a constant intensity", () => {
 test("clear weather tints auto quieter than a storm, never off", () => {
   const clear = RainModel.resolveIntensity("auto", 0, 0)
   const storm = RainModel.resolveIntensity("auto", 95, 0)
-  assert.ok(clear >= 0.35)
-  assert.ok(clear < 1)
-  assert.ok(storm > 1)
-  assert.ok(storm <= 1.85)
+  assert.ok(clear >= 0.7)
   assert.ok(storm > clear)
+  assert.ok(storm <= 2.6)
+})
+
+test("auto with no weather is denser than steady", () => {
+  assert.ok(RainModel.resolveIntensity("auto", null, 0) > RainModel.resolveIntensity("steady"))
 })
 
 test("auto wander breathes intensity over time", () => {

@@ -46,7 +46,7 @@ function weatherTint(code) {
 }
 
 function wanderAt(elapsed) {
-  return 1 + 0.12 * Math.sin((Number(elapsed) || 0) * 2 * Math.PI / 72)
+  return 1 + 0.1 * Math.sin((Number(elapsed) || 0) * 2 * Math.PI / 72)
 }
 
 function resolveIntensity(mode, weatherCode, elapsed) {
@@ -55,7 +55,7 @@ function resolveIntensity(mode, weatherCode, elapsed) {
   if (mode === "light") return 0.45
   if (mode === "heavy") return 1.55
   if (mode === "steady") return 1
-  return clamp(weatherTint(weatherCode) * wanderAt(elapsed), 0.35, 1.85)
+  return clamp(1.35 * weatherTint(weatherCode) * wanderAt(elapsed), 0.75, 2.6)
 }
 
 function dropTargetFor(width, intensity) {
@@ -64,7 +64,7 @@ function dropTargetFor(width, intensity) {
   if (intensity === undefined || intensity === null) intensity = 1
   var level = Number(intensity)
   if (!isFinite(level) || level <= 0) return 0
-  return Math.max(0, Math.round(w / (90 / level)))
+  return Math.max(0, Math.round(w / (62 / level)))
 }
 
 function wttrToWmo(code) {
