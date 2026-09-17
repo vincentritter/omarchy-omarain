@@ -388,7 +388,7 @@ function blankCell() {
 
 function ensurePool(state) {
   var n = Math.max(Math.round(state.dropTarget || 0), Math.round(state.dropTargetGoal || 0))
-  var needed = n + n * 6
+  var needed = n + n * 10
   while (state.cells.length < needed) state.cells.push(blankCell())
 }
 
@@ -535,6 +535,45 @@ function spawnBurst(state, spec) {
   return cell
 }
 
+function findPuddle(state, x, reach) {
+  for (var i = 0; i < state.cells.length; i++) {
+    var cell = state.cells[i]
+    if (!cell.alive || cell.kind !== "puddle") continue
+    if (Math.abs(cell.x - x) <= reach) return cell
+  }
+  return null
+}
+
+function collectPuddle(state, drop, originX, originY, size) {
+  var existing = findPuddle(state, originX, size * 5)
+  if (existing) {
+    existing.life = Math.min(3.2, existing.life + 0.55)
+    existing.maxLife = Math.max(existing.maxLife, existing.life)
+    existing.w = Math.min(size * 8, existing.w + Math.max(1, size))
+    existing.x = (existing.x + originX) / 2
+    existing.y = originY
+    existing.startAlpha = Math.min(1, existing.startAlpha + 0.12)
+    existing.alpha = existing.startAlpha
+    if (drop.tint) existing.tint = drop.tint
+    return
+  }
+  var count = 1 + Math.floor(state.rng() * 2)
+  for (var i = 0; i < count; i++) {
+    spawnBurst(state, {
+      kind: "puddle",
+      role: drop.role,
+      tint: drop.tint,
+      x: originX + (state.rng() - 0.5) * size * 2,
+      y: originY,
+      vx: 0,
+      vy: 0,
+      size: i === 0 ? size : Math.max(1, size - 1),
+      alpha: 0.82,
+      life: 1.5 + state.rng() * 1.2
+    })
+  }
+}
+
 function splashFrom(state, drop) {
   var originX = drop.x
   var size = Math.max(1, drop.w || state.pixel)
@@ -544,40 +583,44 @@ function splashFrom(state, drop) {
   drop.alive = false
 
   var splashCount = layer === 0
-    ? 1 + Math.floor(state.rng() * 2)
-    : (role === "accent" ? 4 : 2 + Math.floor(state.rng() * 3))
+    ? 2 + Math.floor(state.rng() * 2)
+    : (role === "accent" ? 5 + Math.floor(state.rng() * 3) : 3 + Math.floor(state.rng() * 4))
   for (var i = 0; i < splashCount; i++) {
+    var speck = layer === 0 ? 1 : (state.rng() < 0.35 ? Math.max(1, size - 1) : size)
     spawnBurst(state, {
       kind: "splash",
       role: role,
       tint: drop.tint,
-      x: originX + (state.rng() - 0.5) * size * 3,
+      x: originX + (state.rng() - 0.5) * size * 5,
       y: originY,
-      vx: (state.rng() - 0.5) * (layer === 0 ? 70 : 140),
-      vy: -30 - state.rng() * (layer === 0 ? 40 : 70),
-      size: layer === 0 ? 1 : size,
-      alpha: drop.startAlpha,
-      life: 0.16 + state.rng() * 0.14
+      vx: (state.rng() - 0.5) * (layer === 0 ? 110 : 220),
+      vy: -50 - state.rng() * (layer === 0 ? 70 : 130),
+      size: speck,
+      alpha: Math.min(1, drop.startAlpha + 0.15),
+      life: 0.22 + state.rng() * 0.28
     })
   }
 
-  if (role === "accent" && layer >= 1) {
-    var sparkCount = 1 + Math.floor(state.rng() * 2)
+  var sparkChance = role === "accent" || (layer >= 1 && state.rng() < 0.35)
+  if (sparkChance && layer >= 1) {
+    var sparkCount = 1 + Math.floor(state.rng() * 3)
     for (var s = 0; s < sparkCount; s++) {
       spawnBurst(state, {
         kind: "spark",
         role: "accent",
         tint: drop.tint,
-        x: originX + (state.rng() - 0.5) * size * 2,
+        x: originX + (state.rng() - 0.5) * size * 3,
         y: originY,
-        vx: (state.rng() - 0.5) * 180,
-        vy: -60 - state.rng() * 50,
+        vx: (state.rng() - 0.5) * 260,
+        vy: -80 - state.rng() * 90,
         size: Math.max(1, size - 1),
-        alpha: 0.9,
-        life: 0.12 + state.rng() * 0.1
+        alpha: 1,
+        life: 0.16 + state.rng() * 0.18
       })
     }
   }
+
+  collectPuddle(state, drop, originX, originY, size)
 }
 
 function liveDropTarget(state) {
@@ -749,9 +792,26 @@ function step(state, dt) {
       if (cell.y + cell.h >= state.height) splashFrom(state, cell)
       continue
     }
+    if (cell.kind === "puddle") {
+      cell.life -= dt
+      cell.y = state.height - cell.h
+      cell.vx = 0
+      cell.vy = 0
+      if (cell.life <= 0) {
+        cell.alive = false
+        continue
+      }
+      cell.alpha = cell.startAlpha * (cell.life / cell.maxLife)
+      continue
+    }
     cell.vy += gravity * dt
     cell.x += cell.vx * dt
     cell.y += cell.vy * dt
+    if (cell.kind === "splash" && cell.vy > 0 && cell.y + cell.h >= state.height) {
+      cell.y = state.height - cell.h
+      cell.vy *= -0.32
+      cell.vx *= 0.7
+    }
     cell.life -= dt
     if (cell.life <= 0 || cell.y > state.height + state.pixel) {
       cell.alive = false

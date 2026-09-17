@@ -93,7 +93,7 @@ test("a drop that hits the floor becomes a splash", () => {
   assert.equal(ofKind(state, "drop").length, 0)
   const splashes = ofKind(state, "splash")
   assert.ok(splashes.length >= 2)
-  assert.ok(splashes.length <= 4)
+  assert.ok(splashes.length <= 8)
   splashes.forEach(function (splash) {
     assert.equal(splash.role, "muted")
     assert.ok(splash.life > 0)
@@ -130,6 +130,46 @@ test("splash particles fade and then vanish", () => {
   assert.equal(ofKind(state, "splash").length, 0)
   assert.equal(ofKind(state, "spark").length, 0)
   assert.ok(startAlpha > 0)
+})
+
+test("a drop leaves a puddle that sits on the floor and fades", () => {
+  const state = RainModel.createState(400, 200, { seed: 6, pixel: 4, mode: "steady" })
+  state.cells.forEach(function (cell) { cell.alive = false })
+  state.dropTarget = 0
+  state.dropTargetGoal = 0
+  RainModel.spawnDrop(state, { x: 40, y: 196, vy: 80, role: "muted", layer: 1 })
+  RainModel.step(state, 0.1)
+  const puddles = ofKind(state, "puddle")
+  assert.ok(puddles.length >= 1)
+  puddles.forEach(function (puddle) {
+    assert.ok(puddle.y + puddle.h >= state.height - 1)
+    assert.ok(puddle.life > 0.8)
+  })
+  const start = puddles[0].alpha
+  const startLife = puddles[0].life
+  for (var i = 0; i < 8; i++) RainModel.step(state, 0.05)
+  assert.ok(puddles[0].alive)
+  assert.ok(puddles[0].alpha < start)
+  assert.ok(puddles[0].life < startLife)
+})
+
+test("a second drop nearby feeds the same puddle", () => {
+  const state = RainModel.createState(400, 200, { seed: 7, pixel: 4, mode: "steady" })
+  state.cells.forEach(function (cell) { cell.alive = false })
+  state.dropTarget = 0
+  state.dropTargetGoal = 0
+  RainModel.spawnDrop(state, { x: 40, y: 196, vy: 80, role: "muted", layer: 1 })
+  RainModel.step(state, 0.1)
+  const first = ofKind(state, "puddle")
+  assert.ok(first.length >= 1)
+  const count = first.length
+  const life = first[0].life
+  const width = first[0].w
+  RainModel.spawnDrop(state, { x: 44, y: 196, vy: 80, role: "muted", layer: 1 })
+  RainModel.step(state, 0.1)
+  const after = ofKind(state, "puddle")
+  assert.ok(after.length <= count + 1)
+  assert.ok(after[0].life > life || after[0].w > width)
 })
 
 test("a fallen drop is replaced so rain keeps falling", () => {
