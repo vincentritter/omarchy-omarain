@@ -284,12 +284,12 @@ Item {
         function onScriptChanged() { panel.applyConfig() }
       }
 
-      Timer {
-        interval: 50
+      FrameAnimation {
         running: panel.sim !== null && panel.visible && root.mode !== "off"
-        repeat: true
         onTriggered: {
-          RainModel.step(panel.sim, interval / 1000)
+          var dt = frameTime
+          if (!(dt > 0) || dt > 0.05) dt = 1 / 60
+          RainModel.step(panel.sim, dt)
           panel.tick++
         }
       }
@@ -305,8 +305,8 @@ Item {
           readonly property int glyphSize: 11
           readonly property bool glyphDrop: root.useGlyphs && !!(cell && cell.kind === "drop")
           visible: panel.tick >= 0 && !!(cell && cell.alive && cell.alpha > 0.02)
-          x: panel.tick >= 0 && cell ? Math.round(cell.x) : 0
-          y: panel.tick >= 0 && cell ? Math.round(glyphDrop ? cell.y + cell.h - Math.max(1, glyphTrail.length) * glyphSize : cell.y) : 0
+          x: panel.tick >= 0 && cell ? cell.x : 0
+          y: panel.tick >= 0 && cell ? (glyphDrop ? cell.y + cell.h - Math.max(1, glyphTrail.length) * glyphSize : cell.y) : 0
           width: panel.tick >= 0 && cell ? (glyphDrop ? glyphSize : cell.w) : 0
           height: panel.tick >= 0 && cell ? (glyphDrop ? Math.max(1, glyphTrail.length) * glyphSize : cell.h) : 0
           z: panel.tick >= 0 && cell ? cell.layer : 0

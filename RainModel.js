@@ -405,6 +405,7 @@ function blankCell() {
     startAlpha: 0,
     targetAlpha: 0,
     bornY: 0,
+    collapseAcc: 0,
     life: 0,
     maxLife: 0
   }
@@ -518,6 +519,7 @@ function paintDrop(cell, state, spec) {
   cell.glyph = spec.glyph || pickGlyph(state.rng)
   cell.trailGlyphs = cell.glyph
   cell.glyphStage = 0
+  cell.collapseAcc = 0
   cell.tint = spec.tint || pickPsychedelic(state.rng)
   cell.life = 1
   cell.maxLife = 1
@@ -822,9 +824,13 @@ function step(state, dt) {
         if (cell.y + cell.h >= state.height) {
           cell.y = state.height - cell.h
           if (cell.trailGlyphs && cell.trailGlyphs.length > 1) {
-            cell.trailGlyphs = cell.trailGlyphs.substring(1)
-            cell.glyph = cell.trailGlyphs.charAt(cell.trailGlyphs.length - 1)
-            continue
+            cell.collapseAcc = (cell.collapseAcc || 0) + dt
+            while (cell.collapseAcc >= 0.05 && cell.trailGlyphs.length > 1) {
+              cell.collapseAcc -= 0.05
+              cell.trailGlyphs = cell.trailGlyphs.substring(1)
+              cell.glyph = cell.trailGlyphs.charAt(cell.trailGlyphs.length - 1)
+            }
+            if (cell.trailGlyphs.length > 1) continue
           }
           splashFrom(state, cell)
           continue
