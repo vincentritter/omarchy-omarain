@@ -19,6 +19,7 @@ Item {
 
   property string mode: "auto"
   property var weatherCode: null
+  property real windX: 0
   property var location: ({ name: "", latitude: null, longitude: null })
   property bool modeLoaded: false
   property bool pendingWeatherRefresh: false
@@ -59,8 +60,17 @@ Item {
 
   function applyWeather(raw) {
     var code = RainModel.weatherCodeFromPayload(raw)
-    if (code === root.weatherCode) return
-    root.weatherCode = code
+    var windX = RainModel.windXFromPayload(raw)
+    var dirty = false
+    if (code !== root.weatherCode) {
+      root.weatherCode = code
+      dirty = true
+    }
+    if (windX !== root.windX) {
+      root.windX = windX
+      dirty = true
+    }
+    if (!dirty) return
     root.bumpConfig()
     persistMode()
   }
@@ -183,7 +193,7 @@ Item {
 
       function applyConfig() {
         if (!sim) return
-        RainModel.configure(sim, { mode: root.mode, weatherCode: root.weatherCode })
+        RainModel.configure(sim, { mode: root.mode, weatherCode: root.weatherCode, windX: root.windX })
       }
 
       function syncSim() {
@@ -193,7 +203,8 @@ Item {
             pixel: 4,
             seed: root.seedFor(modelData),
             mode: root.mode,
-            weatherCode: root.weatherCode
+            weatherCode: root.weatherCode,
+            windX: root.windX
           })
           return
         }
@@ -232,6 +243,7 @@ Item {
           y: panel.tick >= 0 && cell ? Math.round(cell.y) : 0
           width: panel.tick >= 0 && cell ? cell.w : 0
           height: panel.tick >= 0 && cell ? cell.h : 0
+          z: panel.tick >= 0 && cell ? cell.layer : 0
           color: panel.tick >= 0 ? root.fillFor(cell ? cell.role : "muted", cell ? cell.alpha : 0) : "transparent"
           antialiasing: false
         }

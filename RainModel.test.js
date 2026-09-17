@@ -26,12 +26,43 @@ test("createState fills the field with drops already in flight", () => {
   const drops = ofKind(state, "drop")
   assert.equal(drops.length, state.dropTarget)
   drops.forEach(function (drop) {
-    assert.equal(drop.x % state.pixel, 0)
+    assert.ok(drop.w >= 1)
+    assert.equal(drop.x % drop.w, 0)
     assert.ok(drop.x >= 0)
     assert.ok(drop.x < state.width)
     assert.ok(["muted", "foreground", "accent"].indexOf(drop.role) !== -1)
     assert.ok(drop.vy > 0)
   })
+})
+
+test("a field mixes droplet sizes including specks smaller than the base pixel", () => {
+  const state = RainModel.createState(1920, 1080, { seed: 12, pixel: 4 })
+  const drops = ofKind(state, "drop")
+  const widths = {}
+  drops.forEach(function (drop) { widths[drop.w] = true })
+  assert.ok(Object.keys(widths).length >= 2)
+  assert.ok(drops.some(function (drop) { return drop.w < state.pixel }))
+})
+
+test("drops sit on far, mid, and near layers", () => {
+  const state = RainModel.createState(1920, 1080, { seed: 15, pixel: 4 })
+  const layers = {}
+  ofKind(state, "drop").forEach(function (drop) { layers[drop.layer] = true })
+  assert.equal(layers[0], true)
+  assert.equal(layers[1], true)
+  assert.equal(layers[2], true)
+})
+
+test("near drops fall faster than far drops", () => {
+  const state = RainModel.createState(1920, 1080, { seed: 21, pixel: 4 })
+  const drops = ofKind(state, "drop")
+  const far = drops.filter(function (drop) { return drop.layer === 0 })
+  const near = drops.filter(function (drop) { return drop.layer === 2 })
+  assert.ok(far.length > 0)
+  assert.ok(near.length > 0)
+  const farMax = Math.max.apply(null, far.map(function (drop) { return drop.vy }))
+  const nearMin = Math.min.apply(null, near.map(function (drop) { return drop.vy }))
+  assert.ok(nearMin > farMax)
 })
 
 test("a slice of drops use the accent role", () => {
@@ -56,7 +87,8 @@ test("a drop that hits the floor becomes a splash", () => {
   const state = RainModel.createState(400, 200, { seed: 2, pixel: 4, mode: "steady" })
   state.cells.forEach(function (cell) { cell.alive = false })
   state.dropTarget = 0
-  RainModel.spawnDrop(state, { x: 40, y: 196, vy: 80, role: "muted" })
+  state.dropTargetGoal = 0
+  RainModel.spawnDrop(state, { x: 40, y: 196, vy: 80, role: "muted", layer: 1 })
   RainModel.step(state, 0.1)
   assert.equal(ofKind(state, "drop").length, 0)
   const splashes = ofKind(state, "splash")
@@ -72,7 +104,8 @@ test("an accent drop splashes with extra spark specks", () => {
   const state = RainModel.createState(400, 200, { seed: 4, pixel: 4, mode: "steady" })
   state.cells.forEach(function (cell) { cell.alive = false })
   state.dropTarget = 0
-  RainModel.spawnDrop(state, { x: 80, y: 196, vy: 80, role: "accent" })
+  state.dropTargetGoal = 0
+  RainModel.spawnDrop(state, { x: 80, y: 196, vy: 80, role: "accent", layer: 2 })
   RainModel.step(state, 0.1)
   const splashes = ofKind(state, "splash")
   const sparks = ofKind(state, "spark")
@@ -87,7 +120,8 @@ test("splash particles fade and then vanish", () => {
   const state = RainModel.createState(400, 200, { seed: 5, pixel: 4, mode: "steady" })
   state.cells.forEach(function (cell) { cell.alive = false })
   state.dropTarget = 0
-  RainModel.spawnDrop(state, { x: 20, y: 196, vy: 80, role: "foreground" })
+  state.dropTargetGoal = 0
+  RainModel.spawnDrop(state, { x: 20, y: 196, vy: 80, role: "foreground", layer: 1 })
   RainModel.step(state, 0.05)
   const splashes = ofKind(state, "splash")
   assert.ok(splashes.length > 0)
@@ -102,7 +136,8 @@ test("a fallen drop is replaced so rain keeps falling", () => {
   const state = RainModel.createState(400, 200, { seed: 8, pixel: 4, mode: "steady" })
   state.cells.forEach(function (cell) { cell.alive = false })
   state.dropTarget = 1
-  RainModel.spawnDrop(state, { x: 40, y: 196, vy: 80, role: "muted" })
+  state.dropTargetGoal = 1
+  RainModel.spawnDrop(state, { x: 40, y: 196, vy: 80, role: "muted", layer: 1 })
   RainModel.step(state, 0.1)
   const drops = ofKind(state, "drop")
   assert.equal(drops.length, 1)
@@ -174,6 +209,55 @@ test("auto step retargets the field as the wander moves", () => {
   assert.notEqual(state.dropTarget, start)
 })
 
+test("new drops fade in over the first stretch of fall", () => {
+  const state = RainModel.createState(400, 200, { seed: 1, pixel: 4, mode: "steady" })
+  state.cells.forEach(function (cell) { cell.alive = false })
+  state.dropTarget = 0
+  state.dropTargetGoal = 0
+  const drop = RainModel.spawnDrop(state, { x: 40, y: -20, vy: 80, role: "muted", layer: 1 })
+  assert.ok(drop.targetAlpha > 0)
+  assert.ok(drop.alpha < drop.targetAlpha * 0.5)
+  for (var i = 0; i < 15; i++) RainModel.step(state, 0.05)
+  assert.ok(drop.alpha >= drop.targetAlpha * 0.99)
+})
+
+test("west wind leans far drops more than near drops", () => {
+  const windX = RainModel.windXFromPayload(JSON.stringify({
+    current: { weather_code: 3, wind_speed_10m: 24, wind_direction_10m: 270 }
+  }))
+  assert.ok(windX > 0)
+  const wttr = RainModel.windXFromPayload(JSON.stringify({
+    current_condition: [{ weatherCode: "119", windspeedKmph: "24", winddirDegree: "270" }]
+  }))
+  assert.ok(wttr > 0)
+
+  const state = RainModel.createState(800, 400, { seed: 3, pixel: 4, mode: "steady" })
+  state.cells.forEach(function (cell) { cell.alive = false })
+  state.dropTarget = 0
+  state.dropTargetGoal = 0
+  state.windX = 30
+  const far = RainModel.spawnDrop(state, { x: 200, y: 20, vy: 50, layer: 0, role: "muted" })
+  const near = RainModel.spawnDrop(state, { x: 200, y: 20, vy: 50, layer: 2, role: "muted" })
+  const farX = far.x
+  const nearX = near.x
+  RainModel.step(state, 0.2)
+  assert.ok(Math.abs(far.x - farX) > Math.abs(near.x - nearX))
+})
+
+test("raising intensity eases the drop count instead of snapping", () => {
+  const state = RainModel.createState(800, 600, { seed: 1, mode: "off" })
+  assert.equal(Math.round(state.dropTarget), 0)
+  RainModel.setMode(state, "steady")
+  const goal = state.dropTargetGoal
+  assert.ok(goal > 0)
+  assert.ok(state.dropTarget < goal)
+  RainModel.step(state, 0.05)
+  assert.ok(state.dropTarget > 0)
+  assert.ok(state.dropTarget < goal)
+  for (var i = 0; i < 50; i++) RainModel.step(state, 0.05)
+  assert.equal(Math.round(state.dropTarget), goal)
+})
+
 test("Open-Meteo and wttr payloads yield a weather code", () => {
   assert.equal(RainModel.weatherCodeFromPayload(JSON.stringify({
     current: { weather_code: 61 }
@@ -217,6 +301,7 @@ test("forecast URL prefers Open-Meteo when coordinates exist", () => {
   const coords = RainModel.forecastUrl({ latitude: 50.06, longitude: 19.94 })
   assert.ok(coords.indexOf("api.open-meteo.com") !== -1)
   assert.ok(coords.indexOf("50.06") !== -1)
+  assert.ok(coords.indexOf("wind_speed_10m") !== -1)
   assert.equal(RainModel.forecastUrl({ name: "Krakow" }), "https://wttr.in/Krakow?format=j1")
   assert.equal(RainModel.forecastUrl({}), "https://wttr.in/?format=j1")
 })

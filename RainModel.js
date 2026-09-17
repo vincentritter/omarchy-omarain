@@ -82,6 +82,37 @@ function wttrToWmo(code) {
   return 3
 }
 
+function windXFromPayload(raw) {
+  var text = String(raw || "").replace(/^\s+|\s+$/g, "")
+  if (!text) return 0
+  try {
+    var data = JSON.parse(text)
+    var speed = 0
+    var fromDeg = 0
+    if (data && data.current) {
+      if (data.current.wind_speed_10m != null) speed = Number(data.current.wind_speed_10m)
+      if (data.current.wind_direction_10m != null) fromDeg = Number(data.current.wind_direction_10m)
+    } else {
+      var current = data && data.current_condition && data.current_condition[0]
+      if (current) {
+        if (current.windspeedKmph != null) speed = Number(current.windspeedKmph)
+        if (current.winddirDegree != null) fromDeg = Number(current.winddirDegree)
+      }
+    }
+    if (!isFinite(speed) || speed === 0) return 0
+    if (!isFinite(fromDeg)) fromDeg = 0
+    return -speed * Math.sin(fromDeg * Math.PI / 180) * 1.15
+  } catch (e) {
+    return 0
+  }
+}
+
+function layerWind(layer) {
+  if (layer === 0) return 1
+  if (layer === 1) return 0.4
+  return 0.12
+}
+
 function weatherCodeFromPayload(raw) {
   var text = String(raw || "").replace(/^\s+|\s+$/g, "")
   if (!text) return null
@@ -205,7 +236,7 @@ function forecastUrl(location) {
     return "https://api.open-meteo.com/v1/forecast"
       + "?latitude=" + encodeURIComponent(String(lat))
       + "&longitude=" + encodeURIComponent(String(lon))
-      + "&current=weather_code"
+      + "&current=weather_code,wind_speed_10m,wind_direction_10m"
       + "&forecast_days=1"
       + "&timezone=auto"
   }
@@ -218,6 +249,7 @@ function blankCell() {
   return {
     alive: false,
     kind: "drop",
+    layer: 0,
     x: 0,
     y: 0,
     w: 0,
@@ -228,13 +260,16 @@ function blankCell() {
     role: "muted",
     alpha: 0,
     startAlpha: 0,
+    targetAlpha: 0,
+    bornY: 0,
     life: 0,
     maxLife: 0
   }
 }
 
 function ensurePool(state) {
-  var needed = state.dropTarget + state.dropTarget * 6
+  var n = Math.max(Math.round(state.dropTarget || 0), Math.round(state.dropTargetGoal || 0))
+  var needed = n + n * 6
   while (state.cells.length < needed) state.cells.push(blankCell())
 }
 
@@ -274,28 +309,68 @@ function trailFor(role) {
   return 2
 }
 
-function clampDropX(state, x) {
-  var snapped = snapToGrid(x, state.pixel)
-  var maxX = Math.max(0, state.width - state.pixel)
+function pickLayer(rng) {
+  var roll = rng()
+  if (roll < 0.5) return 0
+  if (roll < 0.82) return 1
+  return 2
+}
+
+function layerSize(layer, pixel, rng) {
+  var base = Math.max(1, pixel || 3)
+  if (layer === 0) return rng() < 0.62 ? 1 : 2
+  if (layer === 1) return Math.max(2, base - 1)
+  return rng() < 0.22 ? base + 1 : base
+}
+
+function layerSpeed(layer, rng) {
+  if (layer === 0) return 42 + rng() * 38
+  if (layer === 1) return 98 + rng() * 52
+  return 178 + rng() * 90
+}
+
+function layerTrail(layer, role) {
+  var extra = role === "accent" ? 1 : 0
+  if (layer === 0) return 1 + extra
+  if (layer === 1) return 2 + extra
+  return 3 + extra
+}
+
+function layerAlpha(layer) {
+  if (layer === 0) return 0.42
+  if (layer === 1) return 0.72
+  return 1
+}
+
+function clampDropX(state, x, size) {
+  var step = Math.max(1, size || state.pixel)
+  var snapped = snapToGrid(x, step)
+  var maxX = Math.max(0, state.width - step)
   if (snapped < 0) return 0
-  if (snapped > maxX) return snapToGrid(maxX, state.pixel)
+  if (snapped > maxX) return snapToGrid(maxX, step)
   return snapped
 }
 
 function paintDrop(cell, state, spec) {
   var role = spec.role || "muted"
+  var layer = spec.layer != null ? spec.layer : 1
+  var size = spec.size != null ? spec.size : layerSize(layer, state.pixel, state.rng)
   cell.alive = true
   cell.kind = "drop"
+  cell.layer = layer
   cell.role = role
-  cell.x = clampDropX(state, spec.x)
+  cell.w = size
+  cell.x = clampDropX(state, spec.x, size)
   cell.y = spec.y
   cell.vx = 0
   cell.vy = spec.vy
-  cell.trail = spec.trail != null ? spec.trail : trailFor(role)
-  cell.w = state.pixel
-  cell.h = state.pixel * cell.trail
-  cell.alpha = spec.alpha != null ? spec.alpha : alphaFor(role)
-  cell.startAlpha = cell.alpha
+  cell.trail = spec.trail != null ? spec.trail : layerTrail(layer, role)
+  cell.h = size * cell.trail
+  var baseAlpha = spec.alpha != null ? spec.alpha : alphaFor(role)
+  cell.targetAlpha = spec.alpha != null ? spec.alpha : baseAlpha * layerAlpha(layer)
+  cell.startAlpha = cell.targetAlpha
+  cell.bornY = spec.y
+  cell.alpha = spec.y < 0 ? 0 : cell.targetAlpha
   cell.life = 1
   cell.maxLife = 1
 }
@@ -304,11 +379,14 @@ function spawnDrop(state, spec) {
   spec = spec || {}
   var cell = freeCell(state)
   var role = spec.role || roleFor(dropCount(state), state.rng)
+  var layer = spec.layer != null ? spec.layer : pickLayer(state.rng)
   paintDrop(cell, state, {
     role: role,
+    layer: layer,
+    size: spec.size,
     x: spec.x != null ? spec.x : state.rng() * state.width,
     y: spec.y != null ? spec.y : state.rng() * (state.height + 80) - 80,
-    vy: spec.vy != null ? spec.vy : 90 + state.rng() * 110,
+    vy: spec.vy != null ? spec.vy : layerSpeed(layer, state.rng),
     trail: spec.trail,
     alpha: spec.alpha
   })
@@ -336,35 +414,40 @@ function spawnBurst(state, spec) {
 
 function splashFrom(state, drop) {
   var originX = drop.x
-  var originY = Math.max(0, state.height - state.pixel)
+  var size = Math.max(1, drop.w || state.pixel)
+  var originY = Math.max(0, state.height - size)
   var role = drop.role
+  var layer = drop.layer == null ? 1 : drop.layer
   drop.alive = false
 
-  var splashCount = role === "accent" ? 4 : 2 + Math.floor(state.rng() * 3)
+  var splashCount = layer === 0
+    ? 1 + Math.floor(state.rng() * 2)
+    : (role === "accent" ? 4 : 2 + Math.floor(state.rng() * 3))
   for (var i = 0; i < splashCount; i++) {
     spawnBurst(state, {
       kind: "splash",
       role: role,
-      x: originX + (state.rng() - 0.5) * state.pixel * 3,
+      x: originX + (state.rng() - 0.5) * size * 3,
       y: originY,
-      vx: (state.rng() - 0.5) * 140,
-      vy: -40 - state.rng() * 70,
+      vx: (state.rng() - 0.5) * (layer === 0 ? 70 : 140),
+      vy: -30 - state.rng() * (layer === 0 ? 40 : 70),
+      size: layer === 0 ? 1 : size,
       alpha: drop.startAlpha,
-      life: 0.22 + state.rng() * 0.16
+      life: 0.16 + state.rng() * 0.14
     })
   }
 
-  if (role === "accent") {
+  if (role === "accent" && layer >= 1) {
     var sparkCount = 1 + Math.floor(state.rng() * 2)
     for (var s = 0; s < sparkCount; s++) {
       spawnBurst(state, {
         kind: "spark",
         role: "accent",
-        x: originX + (state.rng() - 0.5) * state.pixel * 2,
+        x: originX + (state.rng() - 0.5) * size * 2,
         y: originY,
         vx: (state.rng() - 0.5) * 180,
         vy: -60 - state.rng() * 50,
-        size: Math.max(2, state.pixel - 1),
+        size: Math.max(1, size - 1),
         alpha: 0.9,
         life: 0.12 + state.rng() * 0.1
       })
@@ -372,8 +455,12 @@ function splashFrom(state, drop) {
   }
 }
 
+function liveDropTarget(state) {
+  return Math.round(state.dropTarget || 0)
+}
+
 function maintainDrops(state) {
-  var missing = state.dropTarget - dropCount(state)
+  var missing = liveDropTarget(state) - dropCount(state)
   for (var i = 0; i < missing; i++) {
     spawnDrop(state, {
       y: -state.rng() * 80 - state.pixel
@@ -382,7 +469,7 @@ function maintainDrops(state) {
 }
 
 function cullExtraDrops(state) {
-  var extra = dropCount(state) - state.dropTarget
+  var extra = dropCount(state) - liveDropTarget(state)
   for (var c = 0; extra > 0 && c < state.cells.length; c++) {
     if (state.cells[c].alive && state.cells[c].kind === "drop") {
       state.cells[c].alive = false
@@ -391,16 +478,35 @@ function cullExtraDrops(state) {
   }
 }
 
-function applyIntensity(state, intensity) {
+function applyIntensity(state, intensity, immediate) {
   state.intensity = intensity
-  state.dropTarget = dropTargetFor(state.width, intensity)
+  state.dropTargetGoal = dropTargetFor(state.width, intensity)
   ensurePool(state)
-  cullExtraDrops(state)
-  maintainDrops(state)
+  if (immediate || state.dropTargetGoal === 0) {
+    state.dropTarget = state.dropTargetGoal
+    cullExtraDrops(state)
+    maintainDrops(state)
+  }
 }
 
-function syncIntensity(state) {
-  applyIntensity(state, resolveIntensity(state.mode, state.weatherCode, state.elapsed))
+function easeDropTarget(state, dt) {
+  var goal = state.dropTargetGoal
+  if (goal === 0) {
+    if (state.dropTarget !== 0) {
+      state.dropTarget = 0
+      cullExtraDrops(state)
+    }
+    return
+  }
+  if (state.dropTarget === goal) return
+  var t = 1 - Math.exp(-dt / 0.45)
+  state.dropTarget += (goal - state.dropTarget) * t
+  if (Math.abs(goal - state.dropTarget) < 0.5) state.dropTarget = goal
+  ensurePool(state)
+}
+
+function syncIntensity(state, immediate) {
+  applyIntensity(state, resolveIntensity(state.mode, state.weatherCode, state.elapsed), immediate)
 }
 
 function setMode(state, mode) {
@@ -421,6 +527,10 @@ function configure(state, options) {
     var next = options.weatherCode == null || options.weatherCode === "" ? null : Number(options.weatherCode)
     state.weatherCode = isFinite(next) ? next : null
   }
+  if (options.windX !== undefined) {
+    var wind = Number(options.windX)
+    state.windX = isFinite(wind) ? wind : 0
+  }
   syncIntensity(state)
 }
 
@@ -435,14 +545,17 @@ function createState(width, height, options) {
     pixel: pixel,
     mode: mode,
     weatherCode: options.weatherCode == null ? null : Number(options.weatherCode),
+    windX: options.windX == null ? 0 : Number(options.windX),
     elapsed: 0,
     intensity: 1,
     dropTarget: 0,
+    dropTargetGoal: 0,
     cells: [],
     rng: options.rng || mulberry32(seed)
   }
   if (!isFinite(state.weatherCode)) state.weatherCode = null
-  syncIntensity(state)
+  if (!isFinite(state.windX)) state.windX = 0
+  syncIntensity(state, true)
   return state
 }
 
@@ -452,28 +565,44 @@ function resize(state, width, height) {
   for (var i = 0; i < state.cells.length; i++) {
     var cell = state.cells[i]
     if (!cell.alive || cell.kind !== "drop") continue
-    cell.x = clampDropX(state, cell.x)
-    cell.w = state.pixel
-    cell.h = state.pixel * cell.trail
+    cell.x = clampDropX(state, cell.x, cell.w)
   }
-  syncIntensity(state)
+  syncIntensity(state, true)
+}
+
+function fadeDrop(cell) {
+  var span = 40
+  var fallen = cell.y - cell.bornY
+  var fade = fallen <= 0 ? 0 : (fallen >= span ? 1 : fallen / span)
+  cell.alpha = cell.targetAlpha * fade
+}
+
+function wrapDropX(state, cell) {
+  var width = state.width
+  if (width <= 0) return
+  if (cell.x > width) cell.x -= width + cell.w
+  if (cell.x + cell.w < 0) cell.x += width + cell.w
 }
 
 function step(state, dt) {
   state.elapsed += dt
   if (state.mode === "auto") {
     var next = resolveIntensity("auto", state.weatherCode, state.elapsed)
-    if (dropTargetFor(state.width, next) !== state.dropTarget)
-      applyIntensity(state, next)
-    else
-      state.intensity = next
+    applyIntensity(state, next)
   }
+  easeDropTarget(state, dt)
   var gravity = 520
+  var wind = state.windX || 0
   for (var i = 0; i < state.cells.length; i++) {
     var cell = state.cells[i]
     if (!cell.alive) continue
     if (cell.kind === "drop") {
       cell.y += cell.vy * dt
+      if (wind !== 0) {
+        cell.x += wind * layerWind(cell.layer) * dt
+        wrapDropX(state, cell)
+      }
+      fadeDrop(cell)
       if (cell.y + cell.h >= state.height) splashFrom(state, cell)
       continue
     }
@@ -505,6 +634,7 @@ if (typeof module !== "undefined") {
     setWeatherCode: setWeatherCode,
     configure: configure,
     weatherCodeFromPayload: weatherCodeFromPayload,
+    windXFromPayload: windXFromPayload,
     parseLocationFile: parseLocationFile,
     parseStateFile: parseStateFile,
     parseModeFile: parseModeFile,
