@@ -908,7 +908,9 @@ function step(state, dt) {
   state.elapsed += dt
   if (state.mode === "auto") {
     var next = resolveIntensity("auto", state.weatherCode, state.elapsed)
-    applyIntensity(state, next)
+    var goal = dropTargetFor(state.width, next)
+    if (goal !== state.dropTargetGoal || Math.abs(next - state.intensity) > 0.03)
+      applyIntensity(state, next)
   }
   easeDropTarget(state, dt)
   var fieldScale = speedScale(state.speed)
@@ -925,7 +927,7 @@ function step(state, dt) {
         cell.x += wind * layerWind(cell.layer) * dt
         wrapDropX(state, cell)
       }
-      fadeDrop(cell)
+      if (cell.alpha !== cell.targetAlpha) fadeDrop(cell)
       if (usesGlyphs(cell.look, cell.script)) {
         if (cell.y + cell.h >= state.height) {
           cell.y = state.height - cell.h

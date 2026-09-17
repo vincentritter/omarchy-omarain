@@ -29,6 +29,7 @@ Item {
   property var location: ({ name: "", latitude: null, longitude: null })
   property bool modeLoaded: false
   property bool pendingWeatherRefresh: false
+  property int tiltMisses: 0
   property int configTick: 0
 
   function seedFor(screen) {
@@ -227,12 +228,27 @@ Item {
     command: ["sh", Qt.resolvedUrl("read-tilt").toString().replace(/^file:\/\//, "")]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.applyTilt(String(text || "").trim())
+      onStreamFinished: {
+        var raw = String(text || "").trim()
+        if (!raw) {
+          root.tiltMisses += 1
+          if (root.tiltMisses >= 5) tiltTimer.running = false
+          return
+        }
+        root.tiltMisses = 0
+        root.applyTilt(raw)
+      }
+    }
+    onExited: function(code) {
+      if (code === 0) return
+      root.tiltMisses += 1
+      if (root.tiltMisses >= 5) tiltTimer.running = false
     }
   }
 
   Timer {
-    interval: 80
+    id: tiltTimer
+    interval: 120
     running: true
     repeat: true
     onTriggered: if (!tiltProc.running) tiltProc.running = true
@@ -326,7 +342,7 @@ Item {
           if (!(dt > 0) || dt > 0.05) dt = 1 / 60
           panel.sim.tiltX = root.tiltX
           RainModel.step(panel.sim, dt)
-          panel.live = panel.sim.live
+          if (panel.live !== panel.sim.live) panel.live = panel.sim.live
           panel.liveN = panel.sim.live.length
           panel.draining = panel.liveN > 0
           panel.frame++
