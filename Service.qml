@@ -36,10 +36,11 @@ Item {
     return n + (screen ? Math.round(screen.width || 0) : 0)
   }
 
-  function fillFor(role, alpha, tint) {
-    if (root.look === "psychedelic" && tint)
+  function fillFor(role, alpha, tint, look) {
+    var useLook = look || root.look
+    if (useLook === "psychedelic" && tint)
       return Util.alpha(tint, alpha)
-    var hex = RainModel.paletteHex(root.look, role)
+    var hex = RainModel.paletteHex(useLook, role)
     if (hex) return Util.alpha(hex, alpha)
     var base = role === "accent" ? Color.accent : Color.foreground
     return Util.alpha(base, alpha)
@@ -284,8 +285,8 @@ Item {
         function onScriptChanged() { panel.applyConfig() }
       }
 
-      function cssColor(role, alpha, tint) {
-        var c = root.fillFor(role, alpha, tint)
+      function cssColor(role, alpha, tint, look) {
+        var c = root.fillFor(role, alpha, tint, look)
         if (!c) return "transparent"
         if (typeof c === "string") return c
         return "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + c.a + ")"
@@ -294,7 +295,6 @@ Item {
       function paintCells(ctx) {
         if (!sim) return
         var cells = sim.cells
-        var glyphs = root.useGlyphs
         var fontFamily = Style.font.family
         var gs = 11
         ctx.imageSmoothingEnabled = false
@@ -307,19 +307,19 @@ Item {
             var isDrop = cell.kind === "drop"
             if (isDrop && (cell.layer || 0) !== pass) continue
             if (!isDrop && pass !== 3) continue
-            if (glyphs && isDrop) {
+            if (RainModel.usesGlyphs(cell.look, cell.script) && isDrop) {
               var trail = cell.trailGlyphs || cell.glyph || ""
               var n = Math.max(1, trail.length)
               var x = cell.x
               var y = cell.y + cell.h - n * gs
               for (var g = 0; g < n; g++) {
                 var role = g === n - 1 ? "accent" : (g > n - 3 ? "foreground" : "muted")
-                ctx.fillStyle = cssColor(role, cell.alpha * ((g + 1) / n), cell.tint)
+                ctx.fillStyle = cssColor(role, cell.alpha * ((g + 1) / n), cell.tint, cell.look)
                 ctx.fillText(trail.charAt(g), x, y + g * gs)
               }
               continue
             }
-            ctx.fillStyle = cssColor(cell.role, cell.alpha, cell.tint)
+            ctx.fillStyle = cssColor(cell.role, cell.alpha, cell.tint, cell.look)
             ctx.fillRect(cell.x, cell.y, cell.w, cell.h)
           }
         }

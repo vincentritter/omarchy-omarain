@@ -470,14 +470,19 @@ test("natural and hyper fall faster than calm", () => {
   assert.ok(RainModel.speedScale("hyper") > RainModel.speedScale("natural"))
 })
 
-test("hyper-gravity rescales live drops instead of waiting for respawn", () => {
-  const state = RainModel.createState(800, 400, { seed: 4, pixel: 4, mode: "steady" })
-  const drop = ofKind(state, "drop")[0]
-  drop.layer = 2
-  drop.vy = 100
+test("changing speed does not affect drops already falling", () => {
+  const state = RainModel.createState(800, 400, { seed: 4, pixel: 4, mode: "steady", speed: "calm" })
+  state.cells.forEach(function (cell) { cell.alive = false })
+  state.dropTarget = 0
+  state.dropTargetGoal = 0
+  const drop = RainModel.spawnDrop(state, { x: 40, y: 20, vy: 80, layer: 2, role: "muted" })
+  const scale = drop.speedScale
   RainModel.setSpeed(state, "hyper")
   assert.equal(state.speed, "hyper")
-  assert.ok(drop.vy > 100)
+  assert.equal(drop.speedScale, scale)
+  const y = drop.y
+  RainModel.step(state, 0.1)
+  assert.ok(drop.y - y < 20)
 })
 
 test("spawned hyper drops are faster than calm drops on the same layer", () => {
@@ -489,17 +494,14 @@ test("spawned hyper drops are faster than calm drops on the same layer", () => {
     assert.ok(hyperNear[0].vy > calmNear[0].vy * 2)
 })
 
-test("step honors the current speed even if drop vy was not rescaled", () => {
-  const state = RainModel.createState(800, 400, { seed: 1, pixel: 4, mode: "steady", speed: "calm" })
-  state.cells.forEach(function (cell) { cell.alive = false })
-  state.dropTarget = 0
-  state.dropTargetGoal = 0
-  const drop = RainModel.spawnDrop(state, { x: 40, y: 10, vy: 80, layer: 2, role: "muted" })
-  drop.vy = 80
-  state.speed = "hyper"
-  const y = drop.y
-  RainModel.step(state, 0.1)
-  assert.ok(drop.y - y > 40)
+test("a drop keeps its look after the field look changes", () => {
+  const state = RainModel.createState(800, 400, { seed: 1, pixel: 4, mode: "steady", look: "amber" })
+  const drop = ofKind(state, "drop")[0]
+  assert.equal(drop.look, "amber")
+  state.look = "matrix"
+  state.script = "glyphs"
+  assert.equal(drop.look, "amber")
+  assert.equal(drop.script, "pixels")
 })
 
 test("forecast URL prefers Open-Meteo when coordinates exist", () => {

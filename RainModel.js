@@ -402,6 +402,9 @@ function blankCell() {
     glyph: "",
     trailGlyphs: "",
     glyphStage: -1,
+    look: "theme",
+    script: "pixels",
+    speedScale: 1,
     tint: "",
     role: "muted",
     alpha: 0,
@@ -510,8 +513,11 @@ function paintDrop(cell, state, spec) {
   cell.x = clampDropX(state, spec.x, size)
   cell.y = spec.y
   cell.vx = 0
+  cell.look = spec.look || state.look || "theme"
+  cell.script = spec.script || state.script || "pixels"
+  cell.speedScale = spec.speedScale != null ? spec.speedScale : speedScale(state.speed)
   cell.baseVy = spec.vy
-  cell.vy = spec.vy * speedScale(state.speed)
+  cell.vy = spec.vy * cell.speedScale
   cell.trail = spec.trail != null ? spec.trail : layerTrail(layer, role)
   cell.h = size * cell.trail
   var baseAlpha = spec.alpha != null ? spec.alpha : alphaFor(role)
@@ -563,6 +569,9 @@ function spawnBurst(state, spec) {
   cell.life = spec.life
   cell.maxLife = spec.life
   cell.tint = spec.tint || ""
+  cell.look = spec.look || ""
+  cell.script = spec.script || ""
+  cell.speedScale = spec.speedScale != null ? spec.speedScale : 1
   return cell
 }
 
@@ -594,6 +603,9 @@ function collectPuddle(state, drop, originX, originY, size) {
       kind: "puddle",
       role: drop.role,
       tint: drop.tint,
+      look: drop.look,
+      script: drop.script,
+      speedScale: drop.speedScale,
       x: originX + (state.rng() - 0.5) * size * 2,
       y: originY,
       vx: 0,
@@ -622,6 +634,9 @@ function splashFrom(state, drop) {
       kind: "splash",
       role: role,
       tint: drop.tint,
+      look: drop.look,
+      script: drop.script,
+      speedScale: drop.speedScale,
       x: originX + (state.rng() - 0.5) * size * 5,
       y: originY,
       vx: (state.rng() - 0.5) * (layer === 0 ? 110 : 220),
@@ -640,6 +655,9 @@ function splashFrom(state, drop) {
         kind: "spark",
         role: "accent",
         tint: drop.tint,
+        look: drop.look,
+        script: drop.script,
+        speedScale: drop.speedScale,
         x: originX + (state.rng() - 0.5) * size * 3,
         y: originY,
         vx: (state.rng() - 0.5) * 260,
@@ -721,15 +739,7 @@ function setMode(state, mode) {
 }
 
 function setSpeed(state, speed) {
-  var next = normalizeSpeed(speed)
-  state.speed = next
-  var scale = speedScale(next)
-  for (var i = 0; i < state.cells.length; i++) {
-    var cell = state.cells[i]
-    if (!cell.alive || cell.kind !== "drop") continue
-    if (!cell.baseVy) cell.baseVy = cell.vy
-    cell.vy = cell.baseVy * scale
-  }
+  state.speed = normalizeSpeed(speed)
 }
 
 function setWeatherCode(state, code) {
@@ -815,12 +825,12 @@ function step(state, dt) {
     applyIntensity(state, next)
   }
   easeDropTarget(state, dt)
-  var scale = speedScale(state.speed)
-  var gravity = 520 * scale
+  var fieldScale = speedScale(state.speed)
   var wind = state.windX || 0
   for (var i = 0; i < state.cells.length; i++) {
     var cell = state.cells[i]
     if (!cell.alive) continue
+    var scale = cell.speedScale || fieldScale
     if (cell.kind === "drop") {
       var fall = (cell.baseVy || cell.vy) * scale
       cell.vy = fall
@@ -830,7 +840,7 @@ function step(state, dt) {
         wrapDropX(state, cell)
       }
       fadeDrop(cell)
-      if (usesGlyphs(state.look, state.script)) {
+      if (usesGlyphs(cell.look, cell.script)) {
         if (cell.y + cell.h >= state.height) {
           cell.y = state.height - cell.h
           if (cell.trailGlyphs && cell.trailGlyphs.length > 1) {
@@ -867,7 +877,7 @@ function step(state, dt) {
       cell.alpha = cell.startAlpha * (cell.life / cell.maxLife)
       continue
     }
-    cell.vy += gravity * dt
+    cell.vy += 520 * scale * dt
     cell.x += cell.vx * dt
     cell.y += cell.vy * dt
     if (cell.kind === "splash" && cell.vy > 0 && cell.y + cell.h >= state.height) {
