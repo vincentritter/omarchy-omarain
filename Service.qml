@@ -221,7 +221,11 @@ Item {
       required property var modelData
 
       property var sim: null
+      property var live: []
+      property int liveN: 0
+      property int frame: 0
       property bool draining: false
+      readonly property int liveCap: 512
 
       screen: modelData
       visible: !remapGuard.remapping
@@ -285,68 +289,56 @@ Item {
         function onScriptChanged() { panel.applyConfig() }
       }
 
-      function cssColor(role, alpha, tint, look) {
-        var c = root.fillFor(role, alpha, tint, look)
-        if (!c) return "transparent"
-        if (typeof c === "string") return c
-        return "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + c.a + ")"
-      }
-
-      function paintCells(ctx) {
-        if (!sim) return
-        var cells = sim.cells
-        var fontFamily = Style.font.family
-        var gs = 11
-        ctx.imageSmoothingEnabled = false
-        ctx.textBaseline = "top"
-        ctx.font = gs + "px \"" + fontFamily + "\""
-        for (var pass = 0; pass <= 3; pass++) {
-          for (var i = 0; i < cells.length; i++) {
-            var cell = cells[i]
-            if (!cell.alive || cell.alpha <= 0.02) continue
-            var isDrop = cell.kind === "drop"
-            if (isDrop && (cell.layer || 0) !== pass) continue
-            if (!isDrop && pass !== 3) continue
-            if (RainModel.usesGlyphs(cell.look, cell.script) && isDrop) {
-              var trail = cell.trailGlyphs || cell.glyph || ""
-              var n = Math.max(1, trail.length)
-              var x = cell.x
-              var y = cell.y + cell.h - n * gs
-              for (var g = 0; g < n; g++) {
-                var role = g === n - 1 ? "accent" : (g > n - 3 ? "foreground" : "muted")
-                ctx.fillStyle = cssColor(role, cell.alpha * ((g + 1) / n), cell.tint, cell.look)
-                ctx.fillText(trail.charAt(g), x, y + g * gs)
-              }
-              continue
-            }
-            ctx.fillStyle = cssColor(cell.role, cell.alpha, cell.tint, cell.look)
-            ctx.fillRect(cell.x, cell.y, cell.w, cell.h)
-          }
-        }
-      }
-
       FrameAnimation {
         running: panel.sim !== null && panel.visible && (root.mode !== "off" || panel.draining)
         onTriggered: {
           var dt = frameTime
           if (!(dt > 0) || dt > 0.05) dt = 1 / 60
           RainModel.step(panel.sim, dt)
-          panel.draining = RainModel.hasLive(panel.sim)
-          canvas.requestPaint()
+          panel.live = panel.sim.live
+          panel.liveN = panel.sim.live.length
+          panel.draining = panel.liveN > 0
+          panel.frame++
         }
       }
 
-      Canvas {
-        id: canvas
-        anchors.fill: parent
-        renderTarget: Canvas.FramebufferObject
-        renderStrategy: Canvas.Cooperative
-        contextType: "2d"
-        onPaint: {
-          var ctx = getContext("2d")
-          if (!ctx) return
-          ctx.clearRect(0, 0, width, height)
-          panel.paintCells(ctx)
+      Repeater {
+        model: Math.min(panel.liveN, panel.liveCap)
+
+        Item {
+          required property int index
+          readonly property var cell: {
+            panel.frame
+            return index < panel.liveN ? panel.live[index] : null
+          }
+          readonly property bool glyphDrop: !!(cell && RainModel.usesGlyphs(cell.look, cell.script) && cell.kind === "drop")
+          readonly property int glyphSize: 11
+          readonly property int glyphLen: cell && cell.trailGlyphs ? cell.trailGlyphs.length : (cell && cell.glyph ? 1 : 0)
+          visible: panel.frame >= 0 && !!(cell && cell.alive && cell.alpha > 0.02)
+          x: panel.frame >= 0 && cell ? cell.x : 0
+          y: panel.frame >= 0 && cell ? (glyphDrop ? cell.y + cell.h - Math.max(1, glyphLen) * glyphSize : cell.y) : 0
+          z: cell && cell.kind === "drop" ? (cell.layer || 0) : 3
+          width: panel.frame >= 0 && cell ? (glyphDrop ? glyphSize : cell.w) : 0
+          height: panel.frame >= 0 && cell ? (glyphDrop ? Math.max(1, glyphLen) * glyphSize : cell.h) : 0
+
+          Rectangle {
+            anchors.fill: parent
+            visible: !glyphDrop
+            color: panel.frame >= 0 && cell ? root.fillFor(cell.role, cell.alpha, cell.tint, cell.look) : "transparent"
+            antialiasing: false
+          }
+
+          Text {
+            visible: glyphDrop
+            width: glyphSize
+            height: parent.height
+            text: panel.frame >= 0 && cell && cell.trailGlyphs ? cell.trailGlyphs : (cell && cell.glyph ? cell.glyph : "")
+            color: panel.frame >= 0 && cell ? root.fillFor("accent", cell.alpha, cell.tint, cell.look) : "transparent"
+            font.family: Style.font.family
+            font.pixelSize: glyphSize
+            wrapMode: Text.WrapAnywhere
+            textFormat: Text.PlainText
+          }
         }
       }
     }

@@ -672,8 +672,24 @@ function splashFrom(state, drop) {
   collectPuddle(state, drop, originX, originY, size)
 }
 
+function gatherLive(state) {
+  var live = state.live
+  if (!live) {
+    live = []
+    state.live = live
+  }
+  var cells = state.cells
+  var w = 0
+  for (var i = 0; i < cells.length; i++) {
+    if (cells[i].alive) live[w++] = cells[i]
+  }
+  live.length = w
+}
+
 function hasLive(state) {
-  if (!state || !state.cells) return false
+  if (!state) return false
+  if (state.live) return state.live.length > 0
+  if (!state.cells) return false
   for (var i = 0; i < state.cells.length; i++) {
     if (state.cells[i].alive) return true
   }
@@ -785,11 +801,13 @@ function createState(width, height, options) {
     dropTarget: 0,
     dropTargetGoal: 0,
     cells: [],
+    live: [],
     rng: options.rng || mulberry32(seed)
   }
   if (!isFinite(state.weatherCode)) state.weatherCode = null
   if (!isFinite(state.windX)) state.windX = 0
   syncIntensity(state, true)
+  gatherLive(state)
   return state
 }
 
@@ -893,6 +911,7 @@ function step(state, dt) {
     cell.alpha = cell.startAlpha * (cell.life / cell.maxLife)
   }
   maintainDrops(state)
+  gatherLive(state)
 }
 
 if (typeof module !== "undefined") {
