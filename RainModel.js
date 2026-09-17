@@ -151,7 +151,7 @@ function paletteHex(look, role) {
 
 function normalizeMode(value) {
   var mode = String(value || "").replace(/^\s+|\s+$/g, "").toLowerCase()
-  if (mode === "off" || mode === "light" || mode === "steady" || mode === "heavy" || mode === "auto")
+  if (mode === "off" || mode === "light" || mode === "steady" || mode === "heavy" || mode === "torrential" || mode === "auto")
     return mode
   return "auto"
 }
@@ -179,7 +179,8 @@ function resolveIntensity(mode, weatherCode, elapsed) {
   mode = normalizeMode(mode)
   if (mode === "off") return 0
   if (mode === "light") return 0.45
-  if (mode === "heavy") return 1.55
+  if (mode === "heavy") return 3.4
+  if (mode === "torrential") return 8
   if (mode === "steady") return 1
   return clamp(1.35 * weatherTint(weatherCode) * wanderAt(elapsed), 0.75, 2.6)
 }
@@ -327,7 +328,7 @@ function mergeState(raw, mode, weatherCode, speed, look, script) {
 }
 
 function cycleMode(mode) {
-  var modes = ["off", "light", "steady", "heavy", "auto"]
+  var modes = ["off", "light", "steady", "heavy", "torrential", "auto"]
   var index = modes.indexOf(normalizeMode(mode))
   if (index < 0) return "auto"
   return modes[(index + 1) % modes.length]
@@ -338,6 +339,7 @@ function modeLabel(mode) {
   if (mode === "off") return "Off"
   if (mode === "light") return "Light"
   if (mode === "heavy") return "Heavy"
+  if (mode === "torrential") return "Torrential"
   if (mode === "auto") return "Auto"
   return "Steady"
 }
@@ -363,6 +365,7 @@ function modeOptions() {
     { value: "light", label: "Light" },
     { value: "steady", label: "Steady" },
     { value: "heavy", label: "Heavy" },
+    { value: "torrential", label: "Torrential" },
     { value: "auto", label: "Auto" }
   ]
 }

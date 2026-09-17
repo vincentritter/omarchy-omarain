@@ -195,6 +195,7 @@ test("resize keeps the drop field matched to the new width", () => {
 test("unknown modes fall back to auto", () => {
   assert.equal(RainModel.normalizeMode("auto"), "auto")
   assert.equal(RainModel.normalizeMode("heavy"), "heavy")
+  assert.equal(RainModel.normalizeMode("torrential"), "torrential")
   assert.equal(RainModel.normalizeMode(""), "auto")
   assert.equal(RainModel.normalizeMode("nope"), "auto")
 })
@@ -203,7 +204,8 @@ test("fixed modes keep a constant intensity", () => {
   assert.equal(RainModel.resolveIntensity("off"), 0)
   assert.equal(RainModel.resolveIntensity("light"), 0.45)
   assert.equal(RainModel.resolveIntensity("steady"), 1)
-  assert.equal(RainModel.resolveIntensity("heavy"), 1.55)
+  assert.ok(RainModel.resolveIntensity("heavy") > 2)
+  assert.ok(RainModel.resolveIntensity("torrential") > RainModel.resolveIntensity("heavy") * 2)
 })
 
 test("clear weather tints auto quieter than a storm, never off", () => {
