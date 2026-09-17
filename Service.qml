@@ -238,7 +238,14 @@ Item {
 
       function applyConfig() {
         if (!sim) return
-        RainModel.configure(sim, { mode: root.mode, weatherCode: root.weatherCode, windX: root.windX, speed: root.speed })
+        RainModel.configure(sim, {
+          mode: root.mode,
+          weatherCode: root.weatherCode,
+          windX: root.windX,
+          speed: root.speed,
+          look: root.look,
+          script: root.script
+        })
       }
 
       function syncSim() {
@@ -250,7 +257,9 @@ Item {
             mode: root.mode,
             weatherCode: root.weatherCode,
             windX: root.windX,
-            speed: root.speed
+            speed: root.speed,
+            look: root.look,
+            script: root.script
           })
           return
         }
@@ -286,30 +295,44 @@ Item {
         model: panel.sim && panel.tick >= 0 ? panel.sim.cells.length : 0
 
         Item {
+          id: dropItem
           required property int index
           readonly property var cell: panel.sim ? panel.sim.cells[index] : null
+          readonly property string glyphTrail: panel.tick >= 0 && cell && cell.trailGlyphs ? cell.trailGlyphs : (cell && cell.glyph ? cell.glyph : "")
+          readonly property int glyphSize: 11
+          readonly property bool glyphDrop: root.useGlyphs && !!(cell && cell.kind === "drop")
           visible: panel.tick >= 0 && !!(cell && cell.alive && cell.alpha > 0.02)
           x: panel.tick >= 0 && cell ? Math.round(cell.x) : 0
-          y: panel.tick >= 0 && cell ? Math.round(cell.y) : 0
-          width: panel.tick >= 0 && cell ? (root.useGlyphs && cell.kind === "drop" ? 16 : cell.w) : 0
-          height: panel.tick >= 0 && cell ? (root.useGlyphs && cell.kind === "drop" ? 18 : cell.h) : 0
+          y: panel.tick >= 0 && cell ? Math.round(glyphDrop ? cell.y + cell.h - Math.max(1, glyphTrail.length) * glyphSize : cell.y) : 0
+          width: panel.tick >= 0 && cell ? (glyphDrop ? glyphSize : cell.w) : 0
+          height: panel.tick >= 0 && cell ? (glyphDrop ? Math.max(1, glyphTrail.length) * glyphSize : cell.h) : 0
           z: panel.tick >= 0 && cell ? cell.layer : 0
 
           Rectangle {
             anchors.fill: parent
-            visible: !root.useGlyphs || (cell && cell.kind !== "drop")
+            visible: !dropItem.glyphDrop
             color: root.look && panel.tick >= 0 ? root.fillFor(cell ? cell.role : "muted", cell ? cell.alpha : 0, cell ? cell.tint : "") : "transparent"
             antialiasing: false
           }
 
-          Text {
-            visible: root.useGlyphs && cell && cell.kind === "drop"
-            text: panel.tick >= 0 && cell && cell.glyph ? cell.glyph : "0"
-            color: root.fillFor(cell ? cell.role : "accent", 1, cell ? cell.tint : "")
-            font.family: "Noto Sans Mono CJK JP"
-            font.pixelSize: cell && cell.layer === 2 ? 18 : (cell && cell.layer === 1 ? 15 : 13)
-            font.bold: !!(cell && cell.role === "accent")
-            textFormat: Text.PlainText
+          Repeater {
+            model: 10
+            Text {
+              required property int index
+              visible: dropItem.glyphDrop && index < dropItem.glyphTrail.length
+              y: index * dropItem.glyphSize
+              width: dropItem.glyphSize
+              height: dropItem.glyphSize
+              text: dropItem.glyphTrail.charAt(index)
+              color: root.fillFor(
+                index === dropItem.glyphTrail.length - 1 ? "accent" : (index > dropItem.glyphTrail.length - 3 ? "foreground" : "muted"),
+                (dropItem.cell ? dropItem.cell.alpha : 1) * ((index + 1) / Math.max(1, dropItem.glyphTrail.length)),
+                dropItem.cell ? dropItem.cell.tint : ""
+              )
+              font.family: Style.font.family
+              font.pixelSize: dropItem.glyphSize
+              textFormat: Text.PlainText
+            }
           }
         }
       }

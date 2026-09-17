@@ -363,11 +363,59 @@ test("matrix script cycles between pixels and glyphs", () => {
   assert.equal(RainModel.usesGlyphs("theme", "glyphs"), false)
 })
 
-test("spawned drops carry a matrix glyph", () => {
+test("spawned drops carry a single artifact glyph", () => {
   const state = RainModel.createState(800, 400, { seed: 2, pixel: 4, mode: "steady" })
   const drop = ofKind(state, "drop")[0]
   assert.equal(typeof drop.glyph, "string")
-  assert.ok(drop.glyph.length >= 1)
+  assert.equal(drop.glyph.length, 1)
+  assert.ok("█▓▒░<>/ $*!?#|".indexOf(drop.glyph) !== -1)
+})
+
+test("a drop cycles its glyph as it falls", () => {
+  const state = RainModel.createState(400, 300, { seed: 8, pixel: 4, mode: "steady", look: "matrix", script: "glyphs" })
+  state.cells.forEach(function (cell) { cell.alive = false })
+  state.dropTarget = 0
+  state.dropTargetGoal = 0
+  const drop = RainModel.spawnDrop(state, { x: 40, y: 10, vy: 120, role: "muted", layer: 1 })
+  const seen = {}
+  seen[drop.glyph] = true
+  for (var i = 0; i < 20; i++) {
+    RainModel.step(state, 0.05)
+    if (drop.glyph) seen[drop.glyph] = true
+  }
+  assert.ok(Object.keys(seen).length >= 2)
+})
+
+test("a falling drop grows a fading glyph trail behind the head", () => {
+  const state = RainModel.createState(400, 400, { seed: 3, pixel: 4, mode: "steady", look: "matrix", script: "glyphs" })
+  state.cells.forEach(function (cell) { cell.alive = false })
+  state.dropTarget = 0
+  state.dropTargetGoal = 0
+  const drop = RainModel.spawnDrop(state, { x: 40, y: 10, vy: 120, role: "muted", layer: 2 })
+  assert.equal(drop.trailGlyphs, drop.glyph)
+  for (var i = 0; i < 20; i++) RainModel.step(state, 0.05)
+  assert.ok(drop.trailGlyphs.length > 1)
+  assert.ok(drop.trailGlyphs.length <= 9)
+  assert.equal(drop.trailGlyphs.charAt(drop.trailGlyphs.length - 1), drop.glyph)
+})
+
+test("a glyph trail collapses into the floor before splashing", () => {
+  const state = RainModel.createState(400, 200, { seed: 4, pixel: 4, mode: "steady", look: "matrix", script: "glyphs" })
+  state.cells.forEach(function (cell) { cell.alive = false })
+  state.dropTarget = 0
+  state.dropTargetGoal = 0
+  const drop = RainModel.spawnDrop(state, { x: 40, y: 10, vy: 80, role: "muted", layer: 2 })
+  drop.trailGlyphs = "█▓▒░<>/$*"
+  drop.glyph = "*"
+  drop.y = 196
+  drop.h = 4
+  RainModel.step(state, 0.05)
+  assert.equal(drop.alive, true)
+  assert.ok(drop.trailGlyphs.length < 9)
+  const len = drop.trailGlyphs.length
+  RainModel.step(state, 0.05)
+  assert.equal(drop.alive, true)
+  assert.equal(drop.trailGlyphs.length, len - 1)
 })
 
 test("unknown looks fall back to theme", () => {

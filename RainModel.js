@@ -96,9 +96,24 @@ function usesGlyphs(look, script) {
 }
 
 function pickGlyph(rng) {
-  var glyphs = "2598Z*):.=+-|_ｦｱｳｴｵｶｷｹｺｻｼｽｾｿﾀﾂﾃﾅﾆﾇﾈﾊﾋﾎﾏﾐﾑﾒﾓﾔﾕﾗﾘﾜ"
+  var glyphs = "█▓▒░<>/ $*!?#|"
   var roll = rng ? rng() : Math.random()
-  return glyphs.charAt(Math.floor(roll * glyphs.length)) || "0"
+  return glyphs.charAt(Math.floor(roll * glyphs.length)) || "░"
+}
+
+function glyphTrailCap(layer) {
+  if (layer === 0) return 4
+  if (layer === 1) return 6
+  return 9
+}
+
+function pushGlyph(cell, rng) {
+  var next = pickGlyph(rng)
+  cell.glyph = next
+  cell.trailGlyphs = (cell.trailGlyphs || "") + next
+  var cap = glyphTrailCap(cell.layer)
+  if (cell.trailGlyphs.length > cap)
+    cell.trailGlyphs = cell.trailGlyphs.substring(cell.trailGlyphs.length - cap)
 }
 
 function psychedelicSwatches() {
@@ -375,6 +390,8 @@ function blankCell() {
     baseVy: 0,
     trail: 1,
     glyph: "",
+    trailGlyphs: "",
+    glyphStage: -1,
     tint: "",
     role: "muted",
     alpha: 0,
@@ -492,6 +509,8 @@ function paintDrop(cell, state, spec) {
   cell.bornY = spec.y
   cell.alpha = spec.y < 0 ? 0 : cell.targetAlpha
   cell.glyph = spec.glyph || pickGlyph(state.rng)
+  cell.trailGlyphs = cell.glyph
+  cell.glyphStage = 0
   cell.tint = spec.tint || pickPsychedelic(state.rng)
   cell.life = 1
   cell.maxLife = 1
@@ -712,6 +731,8 @@ function configure(state, options) {
     state.windX = isFinite(wind) ? wind : 0
   }
   if (options.speed !== undefined) setSpeed(state, options.speed)
+  if (options.look !== undefined) state.look = normalizeLook(options.look)
+  if (options.script !== undefined) state.script = normalizeScript(options.script)
   syncIntensity(state)
 }
 
@@ -728,6 +749,8 @@ function createState(width, height, options) {
     weatherCode: options.weatherCode == null ? null : Number(options.weatherCode),
     windX: options.windX == null ? 0 : Number(options.windX),
     speed: normalizeSpeed(options.speed || "calm"),
+    look: normalizeLook(options.look || "theme"),
+    script: normalizeScript(options.script || "pixels"),
     elapsed: 0,
     intensity: 1,
     dropTarget: 0,
@@ -788,7 +811,24 @@ function step(state, dt) {
         wrapDropX(state, cell)
       }
       fadeDrop(cell)
-      if (state.rng() < 0.05) cell.glyph = pickGlyph(state.rng)
+      if (usesGlyphs(state.look, state.script)) {
+        if (cell.y + cell.h >= state.height) {
+          cell.y = state.height - cell.h
+          if (cell.trailGlyphs && cell.trailGlyphs.length > 1) {
+            cell.trailGlyphs = cell.trailGlyphs.substring(1)
+            cell.glyph = cell.trailGlyphs.charAt(cell.trailGlyphs.length - 1)
+            continue
+          }
+          splashFrom(state, cell)
+          continue
+        }
+        var stage = Math.floor(Math.max(0, cell.y - cell.bornY) / 10)
+        if (stage !== cell.glyphStage) {
+          cell.glyphStage = stage
+          pushGlyph(cell, state.rng)
+        }
+        continue
+      }
       if (cell.y + cell.h >= state.height) splashFrom(state, cell)
       continue
     }
