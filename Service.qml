@@ -18,6 +18,7 @@ Item {
   readonly property string weatherPath: home + "/.local/state/omarchy/settings/weather.json"
 
   property string mode: "auto"
+  property string speed: "calm"
   property var weatherCode: null
   property real windX: 0
   property var location: ({ name: "", latitude: null, longitude: null })
@@ -52,10 +53,21 @@ Item {
     persistMode()
   }
 
+  function setSpeed(next) {
+    var speed = RainModel.normalizeSpeed(next)
+    if (speed === root.speed) {
+      persistMode()
+      return
+    }
+    root.speed = speed
+    root.bumpConfig()
+    persistMode()
+  }
+
   function persistMode() {
     if (!root.modeLoaded) return
     if (!mkdirProc.running) mkdirProc.running = true
-    modeFile.setText(RainModel.stateFileBody(root.mode, root.weatherCode))
+    modeFile.setText(RainModel.stateFileBody(root.mode, root.weatherCode, root.speed))
   }
 
   function applyWeather(raw) {
@@ -95,13 +107,18 @@ Item {
     watchChanges: true
     atomicWrites: true
     printErrors: false
+    onFileChanged: reload()
     onLoaded: {
       var next = RainModel.parseStateFile(text())
+      var dirty = next.mode !== root.mode || next.speed !== root.speed
+      if (next.weatherCode != null && next.weatherCode !== root.weatherCode) {
+        root.weatherCode = next.weatherCode
+        dirty = true
+      }
       root.mode = next.mode
-      if (next.weatherCode != null) root.weatherCode = next.weatherCode
+      root.speed = next.speed
       root.modeLoaded = true
-      if (root.weatherCode != null && next.weatherCode == null) root.persistMode()
-      root.bumpConfig()
+      if (dirty) root.bumpConfig()
     }
     onLoadFailed: root.modeLoaded = true
   }
@@ -150,13 +167,10 @@ Item {
   }
 
   Timer {
-    interval: 1500
+    interval: 200
     running: true
-    repeat: false
-    onTriggered: {
-      modeFile.reload()
-      weatherFile.reload()
-    }
+    repeat: true
+    onTriggered: modeFile.reload()
   }
 
   Component.onCompleted: {
@@ -193,7 +207,7 @@ Item {
 
       function applyConfig() {
         if (!sim) return
-        RainModel.configure(sim, { mode: root.mode, weatherCode: root.weatherCode, windX: root.windX })
+        RainModel.configure(sim, { mode: root.mode, weatherCode: root.weatherCode, windX: root.windX, speed: root.speed })
       }
 
       function syncSim() {
@@ -204,7 +218,8 @@ Item {
             seed: root.seedFor(modelData),
             mode: root.mode,
             weatherCode: root.weatherCode,
-            windX: root.windX
+            windX: root.windX,
+            speed: root.speed
           })
           return
         }
@@ -220,11 +235,13 @@ Item {
       Connections {
         target: root
         function onConfigTickChanged() { panel.applyConfig() }
+        function onModeChanged() { panel.applyConfig() }
+        function onSpeedChanged() { panel.applyConfig() }
       }
 
       Timer {
         interval: 50
-        running: panel.sim !== null && panel.visible
+        running: panel.sim !== null && panel.visible && root.mode !== "off"
         repeat: true
         onTriggered: {
           RainModel.step(panel.sim, interval / 1000)

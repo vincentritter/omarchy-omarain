@@ -23,6 +23,36 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, n))
 }
 
+function normalizeSpeed(value) {
+  var speed = String(value || "").replace(/^\s+|\s+$/g, "").toLowerCase()
+  if (speed === "natural") return "natural"
+  if (speed === "hyper" || speed === "hyper-gravity" || speed === "hypergravity") return "hyper"
+  if (speed === "calm") return "calm"
+  return "calm"
+}
+
+function speedScale(speed) {
+  speed = normalizeSpeed(speed)
+  if (speed === "natural") return 3.5
+  if (speed === "hyper") return 16
+  return 1
+}
+
+function speedLabel(speed) {
+  speed = normalizeSpeed(speed)
+  if (speed === "natural") return "Natural"
+  if (speed === "hyper") return "Hyper-gravity"
+  return "Calm"
+}
+
+function speedOptions() {
+  return [
+    { value: "calm", label: "Calm" },
+    { value: "natural", label: "Natural" },
+    { value: "hyper", label: "Hyper-gravity" }
+  ]
+}
+
 function normalizeMode(value) {
   var mode = String(value || "").replace(/^\s+|\s+$/g, "").toLowerCase()
   if (mode === "off" || mode === "light" || mode === "steady" || mode === "heavy" || mode === "auto")
@@ -149,11 +179,12 @@ function parseLocationFile(raw) {
 }
 
 function parseStateFile(raw) {
-  var out = { mode: "auto", weatherCode: null }
+  var out = { mode: "auto", weatherCode: null, speed: "calm" }
   try {
     var data = JSON.parse(String(raw || ""))
     if (!data || typeof data !== "object") return out
     out.mode = normalizeMode(data.mode)
+    out.speed = normalizeSpeed(data.speed)
     if (data.weatherCode != null && data.weatherCode !== "") {
       var code = Number(data.weatherCode)
       if (isFinite(code)) out.weatherCode = code
@@ -168,24 +199,26 @@ function parseModeFile(raw) {
   return parseStateFile(raw).mode
 }
 
-function stateFileBody(mode, weatherCode) {
+function stateFileBody(mode, weatherCode, speed) {
   var body = "{\n  \"mode\": \"" + normalizeMode(mode) + "\""
   if (weatherCode != null && isFinite(Number(weatherCode)))
     body += ",\n  \"weatherCode\": " + Number(weatherCode)
+  body += ",\n  \"speed\": \"" + normalizeSpeed(speed) + "\""
   return body + "\n}\n"
 }
 
 function modeFileBody(mode) {
-  return stateFileBody(mode, null)
+  return stateFileBody(mode, null, "calm")
 }
 
-function mergeState(raw, mode, weatherCode) {
+function mergeState(raw, mode, weatherCode, speed) {
   var current = parseStateFile(raw)
   var nextMode = mode === undefined || mode === null || mode === "" ? current.mode : normalizeMode(mode)
   var nextCode = weatherCode != null && weatherCode !== "" && isFinite(Number(weatherCode))
     ? Number(weatherCode)
     : current.weatherCode
-  return { mode: nextMode, weatherCode: nextCode }
+  var nextSpeed = speed === undefined || speed === null || speed === "" ? current.speed : normalizeSpeed(speed)
+  return { mode: nextMode, weatherCode: nextCode, speed: nextSpeed }
 }
 
 function cycleMode(mode) {
@@ -256,6 +289,7 @@ function blankCell() {
     h: 0,
     vx: 0,
     vy: 0,
+    baseVy: 0,
     trail: 1,
     role: "muted",
     alpha: 0,
@@ -363,7 +397,8 @@ function paintDrop(cell, state, spec) {
   cell.x = clampDropX(state, spec.x, size)
   cell.y = spec.y
   cell.vx = 0
-  cell.vy = spec.vy
+  cell.baseVy = spec.vy
+  cell.vy = spec.vy * speedScale(state.speed)
   cell.trail = spec.trail != null ? spec.trail : layerTrail(layer, role)
   cell.h = size * cell.trail
   var baseAlpha = spec.alpha != null ? spec.alpha : alphaFor(role)
@@ -514,6 +549,18 @@ function setMode(state, mode) {
   syncIntensity(state)
 }
 
+function setSpeed(state, speed) {
+  var next = normalizeSpeed(speed)
+  state.speed = next
+  var scale = speedScale(next)
+  for (var i = 0; i < state.cells.length; i++) {
+    var cell = state.cells[i]
+    if (!cell.alive || cell.kind !== "drop") continue
+    if (!cell.baseVy) cell.baseVy = cell.vy
+    cell.vy = cell.baseVy * scale
+  }
+}
+
 function setWeatherCode(state, code) {
   var next = code == null || code === "" ? null : Number(code)
   state.weatherCode = isFinite(next) ? next : null
@@ -531,6 +578,7 @@ function configure(state, options) {
     var wind = Number(options.windX)
     state.windX = isFinite(wind) ? wind : 0
   }
+  if (options.speed !== undefined) setSpeed(state, options.speed)
   syncIntensity(state)
 }
 
@@ -546,6 +594,7 @@ function createState(width, height, options) {
     mode: mode,
     weatherCode: options.weatherCode == null ? null : Number(options.weatherCode),
     windX: options.windX == null ? 0 : Number(options.windX),
+    speed: normalizeSpeed(options.speed || "calm"),
     elapsed: 0,
     intensity: 1,
     dropTarget: 0,
@@ -591,13 +640,16 @@ function step(state, dt) {
     applyIntensity(state, next)
   }
   easeDropTarget(state, dt)
-  var gravity = 520
+  var scale = speedScale(state.speed)
+  var gravity = 520 * scale
   var wind = state.windX || 0
   for (var i = 0; i < state.cells.length; i++) {
     var cell = state.cells[i]
     if (!cell.alive) continue
     if (cell.kind === "drop") {
-      cell.y += cell.vy * dt
+      var fall = (cell.baseVy || cell.vy) * scale
+      cell.vy = fall
+      cell.y += fall * dt
       if (wind !== 0) {
         cell.x += wind * layerWind(cell.layer) * dt
         wrapDropX(state, cell)
@@ -631,7 +683,12 @@ if (typeof module !== "undefined") {
     step: step,
     resize: resize,
     setMode: setMode,
+    setSpeed: setSpeed,
     setWeatherCode: setWeatherCode,
+    normalizeSpeed: normalizeSpeed,
+    speedScale: speedScale,
+    speedLabel: speedLabel,
+    speedOptions: speedOptions,
     configure: configure,
     weatherCodeFromPayload: weatherCodeFromPayload,
     windXFromPayload: windXFromPayload,

@@ -286,7 +286,12 @@ test("mode file stores a known mode", () => {
   assert.equal(RainModel.parseModeFile(""), "auto")
   assert.equal(RainModel.parseStateFile('{"mode":"auto","weatherCode":61}').weatherCode, 61)
   assert.equal(RainModel.parseStateFile("").weatherCode, null)
-  assert.equal(RainModel.stateFileBody("heavy", 80), '{\n  "mode": "heavy",\n  "weatherCode": 80\n}\n')
+  assert.equal(RainModel.parseStateFile("").speed, "calm")
+  assert.equal(RainModel.parseStateFile('{"mode":"auto","speed":"hyper"}').speed, "hyper")
+  assert.equal(
+    RainModel.stateFileBody("heavy", 80, "calm"),
+    '{\n  "mode": "heavy",\n  "weatherCode": 80,\n  "speed": "calm"\n}\n'
+  )
 })
 
 test("mergeState keeps an existing weather code when a mode write omits it", () => {
@@ -295,6 +300,54 @@ test("mergeState keeps an existing weather code when a mode write omits it", () 
   assert.equal(merged.weatherCode, 80)
   const first = RainModel.mergeState("", "auto", 61)
   assert.equal(first.weatherCode, 61)
+  const speed = RainModel.mergeState('{\n  "mode": "auto",\n  "speed": "natural"\n}\n', "auto", null, null)
+  assert.equal(speed.speed, "natural")
+})
+
+test("unknown speeds fall back to calm", () => {
+  assert.equal(RainModel.normalizeSpeed("calm"), "calm")
+  assert.equal(RainModel.normalizeSpeed("natural"), "natural")
+  assert.equal(RainModel.normalizeSpeed("hyper"), "hyper")
+  assert.equal(RainModel.normalizeSpeed("hyper-gravity"), "hyper")
+  assert.equal(RainModel.normalizeSpeed("nope"), "calm")
+})
+
+test("natural and hyper fall faster than calm", () => {
+  assert.equal(RainModel.speedScale("calm"), 1)
+  assert.ok(RainModel.speedScale("natural") > 1)
+  assert.ok(RainModel.speedScale("hyper") > RainModel.speedScale("natural"))
+})
+
+test("hyper-gravity rescales live drops instead of waiting for respawn", () => {
+  const state = RainModel.createState(800, 400, { seed: 4, pixel: 4, mode: "steady" })
+  const drop = ofKind(state, "drop")[0]
+  drop.layer = 2
+  drop.vy = 100
+  RainModel.setSpeed(state, "hyper")
+  assert.equal(state.speed, "hyper")
+  assert.ok(drop.vy > 100)
+})
+
+test("spawned hyper drops are faster than calm drops on the same layer", () => {
+  const calm = RainModel.createState(800, 400, { seed: 6, pixel: 4, mode: "steady", speed: "calm" })
+  const hyper = RainModel.createState(800, 400, { seed: 6, pixel: 4, mode: "steady", speed: "hyper" })
+  const calmNear = ofKind(calm, "drop").filter(function (drop) { return drop.layer === 2 })
+  const hyperNear = ofKind(hyper, "drop").filter(function (drop) { return drop.layer === 2 })
+  if (calmNear.length && hyperNear.length)
+    assert.ok(hyperNear[0].vy > calmNear[0].vy * 2)
+})
+
+test("step honors the current speed even if drop vy was not rescaled", () => {
+  const state = RainModel.createState(800, 400, { seed: 1, pixel: 4, mode: "steady", speed: "calm" })
+  state.cells.forEach(function (cell) { cell.alive = false })
+  state.dropTarget = 0
+  state.dropTargetGoal = 0
+  const drop = RainModel.spawnDrop(state, { x: 40, y: 10, vy: 80, layer: 2, role: "muted" })
+  drop.vy = 80
+  state.speed = "hyper"
+  const y = drop.y
+  RainModel.step(state, 0.1)
+  assert.ok(drop.y - y > 40)
 })
 
 test("forecast URL prefers Open-Meteo when coordinates exist", () => {
