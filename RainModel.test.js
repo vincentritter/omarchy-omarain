@@ -287,10 +287,14 @@ test("mode file stores a known mode", () => {
   assert.equal(RainModel.parseStateFile('{"mode":"auto","weatherCode":61}').weatherCode, 61)
   assert.equal(RainModel.parseStateFile("").weatherCode, null)
   assert.equal(RainModel.parseStateFile("").speed, "calm")
+  assert.equal(RainModel.parseStateFile("").look, "theme")
   assert.equal(RainModel.parseStateFile('{"mode":"auto","speed":"hyper"}').speed, "hyper")
+  assert.equal(RainModel.parseStateFile('{"look":"matrix"}').look, "matrix")
+  assert.equal(RainModel.parseStateFile("").script, "pixels")
+  assert.equal(RainModel.parseStateFile('{"script":"glyphs"}').script, "glyphs")
   assert.equal(
-    RainModel.stateFileBody("heavy", 80, "calm"),
-    '{\n  "mode": "heavy",\n  "weatherCode": 80,\n  "speed": "calm"\n}\n'
+    RainModel.stateFileBody("heavy", 80, "calm", "theme", "pixels"),
+    '{\n  "mode": "heavy",\n  "weatherCode": 80,\n  "speed": "calm",\n  "look": "theme",\n  "script": "pixels"\n}\n'
   )
 })
 
@@ -302,6 +306,56 @@ test("mergeState keeps an existing weather code when a mode write omits it", () 
   assert.equal(first.weatherCode, 61)
   const speed = RainModel.mergeState('{\n  "mode": "auto",\n  "speed": "natural"\n}\n', "auto", null, null)
   assert.equal(speed.speed, "natural")
+  const look = RainModel.mergeState('{\n  "mode": "auto",\n  "look": "amber"\n}\n', "auto", null, null, null)
+  assert.equal(look.look, "amber")
+  const script = RainModel.mergeState('{\n  "script": "glyphs"\n}\n', "auto", null, null, null, null)
+  assert.equal(script.script, "glyphs")
+})
+
+test("matrix script cycles between pixels and glyphs", () => {
+  assert.equal(RainModel.normalizeScript("glyphs"), "glyphs")
+  assert.equal(RainModel.normalizeScript("text"), "glyphs")
+  assert.equal(RainModel.normalizeScript("nope"), "pixels")
+  assert.equal(RainModel.cycleScript("pixels"), "glyphs")
+  assert.equal(RainModel.cycleScript("glyphs"), "pixels")
+  assert.equal(RainModel.usesGlyphs("matrix", "glyphs"), true)
+  assert.equal(RainModel.usesGlyphs("matrix", "pixels"), false)
+  assert.equal(RainModel.usesGlyphs("theme", "glyphs"), false)
+})
+
+test("spawned drops carry a matrix glyph", () => {
+  const state = RainModel.createState(800, 400, { seed: 2, pixel: 4, mode: "steady" })
+  const drop = ofKind(state, "drop")[0]
+  assert.equal(typeof drop.glyph, "string")
+  assert.ok(drop.glyph.length >= 1)
+})
+
+test("unknown looks fall back to theme", () => {
+  assert.equal(RainModel.normalizeLook("theme"), "theme")
+  assert.equal(RainModel.normalizeLook("psychedelic"), "psychedelic")
+  assert.equal(RainModel.normalizeLook("screensaver"), "psychedelic")
+  assert.equal(RainModel.normalizeLook("matrix"), "matrix")
+  assert.equal(RainModel.normalizeLook("amber"), "amber")
+  assert.equal(RainModel.normalizeLook("nope"), "theme")
+})
+
+test("psychedelic and matrix palettes use their own hex, theme does not", () => {
+  assert.equal(RainModel.paletteHex("theme", "accent"), "")
+  const rain = RainModel.paletteHex("psychedelic", "foreground")
+  assert.equal(rain.charAt(0), "#")
+  assert.equal(rain.length, 7)
+  assert.notEqual(RainModel.paletteHex("matrix", "accent"), rain)
+  assert.notEqual(RainModel.paletteHex("amber", "foreground"), RainModel.paletteHex("matrix", "foreground"))
+})
+
+test("psychedelic drops pick different tints", () => {
+  const state = RainModel.createState(1920, 1080, { seed: 9, pixel: 4, mode: "steady" })
+  const tints = {}
+  ofKind(state, "drop").forEach(function (drop) {
+    assert.equal(drop.tint.charAt(0), "#")
+    tints[drop.tint] = true
+  })
+  assert.ok(Object.keys(tints).length >= 3)
 })
 
 test("unknown speeds fall back to calm", () => {

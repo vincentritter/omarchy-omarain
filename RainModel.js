@@ -53,6 +53,83 @@ function speedOptions() {
   ]
 }
 
+function normalizeLook(value) {
+  var look = String(value || "").replace(/^\s+|\s+$/g, "").toLowerCase()
+  if (look === "psychedelic" || look === "screensaver" || look === "tte" || look === "rain")
+    return "psychedelic"
+  if (look === "matrix") return "matrix"
+  if (look === "amber" || look === "crt") return "amber"
+  if (look === "theme") return "theme"
+  return "theme"
+}
+
+function lookLabel(look) {
+  look = normalizeLook(look)
+  if (look === "psychedelic") return "Psychedelic"
+  if (look === "matrix") return "Matrix"
+  if (look === "amber") return "Amber"
+  return "Theme"
+}
+
+function lookOptions() {
+  return [
+    { value: "theme", label: "Theme" },
+    { value: "psychedelic", label: "Psychedelic" },
+    { value: "matrix", label: "Matrix" },
+    { value: "amber", label: "Amber" }
+  ]
+}
+
+function normalizeScript(value) {
+  var script = String(value || "").replace(/^\s+|\s+$/g, "").toLowerCase()
+  if (script === "glyphs" || script === "glyph" || script === "text" || script === "matrix")
+    return "glyphs"
+  return "pixels"
+}
+
+function cycleScript(script) {
+  return normalizeScript(script) === "glyphs" ? "pixels" : "glyphs"
+}
+
+function usesGlyphs(look, script) {
+  return normalizeLook(look) === "matrix" && normalizeScript(script) === "glyphs"
+}
+
+function pickGlyph(rng) {
+  var glyphs = "2598Z*):.=+-|_ｦｱｳｴｵｶｷｹｺｻｼｽｾｿﾀﾂﾃﾅﾆﾇﾈﾊﾋﾎﾏﾐﾑﾒﾓﾔﾕﾗﾘﾜ"
+  var roll = rng ? rng() : Math.random()
+  return glyphs.charAt(Math.floor(roll * glyphs.length)) || "0"
+}
+
+function psychedelicSwatches() {
+  return [
+    "#FF2BD6", "#00F0FF", "#FFE600", "#7CFF00", "#FF6B00",
+    "#B14FFF", "#FF3B7C", "#00FFC2", "#4D7CFF", "#FF004D",
+    "#FF8AD8", "#C8FF00"
+  ]
+}
+
+function pickPsychedelic(rng) {
+  var swatches = psychedelicSwatches()
+  var roll = rng ? rng() : Math.random()
+  return swatches[Math.floor(roll * swatches.length)] || swatches[0]
+}
+
+function paletteHex(look, role) {
+  look = normalizeLook(look)
+  if (look === "theme") return ""
+  var palettes = {
+    psychedelic: { muted: "#FF2BD6", foreground: "#00F0FF", accent: "#FFE600" },
+    matrix: { muted: "#185318", foreground: "#92be92", accent: "#dbffdb" },
+    amber: { muted: "#E08A00", foreground: "#FFC94A", accent: "#FFE7A0" }
+  }
+  var palette = palettes[look]
+  if (!palette) return ""
+  if (role === "accent") return palette.accent
+  if (role === "muted") return palette.muted
+  return palette.foreground
+}
+
 function normalizeMode(value) {
   var mode = String(value || "").replace(/^\s+|\s+$/g, "").toLowerCase()
   if (mode === "off" || mode === "light" || mode === "steady" || mode === "heavy" || mode === "auto")
@@ -179,12 +256,14 @@ function parseLocationFile(raw) {
 }
 
 function parseStateFile(raw) {
-  var out = { mode: "auto", weatherCode: null, speed: "calm" }
+  var out = { mode: "auto", weatherCode: null, speed: "calm", look: "theme", script: "pixels" }
   try {
     var data = JSON.parse(String(raw || ""))
     if (!data || typeof data !== "object") return out
     out.mode = normalizeMode(data.mode)
     out.speed = normalizeSpeed(data.speed)
+    out.look = normalizeLook(data.look)
+    out.script = normalizeScript(data.script)
     if (data.weatherCode != null && data.weatherCode !== "") {
       var code = Number(data.weatherCode)
       if (isFinite(code)) out.weatherCode = code
@@ -199,26 +278,30 @@ function parseModeFile(raw) {
   return parseStateFile(raw).mode
 }
 
-function stateFileBody(mode, weatherCode, speed) {
+function stateFileBody(mode, weatherCode, speed, look, script) {
   var body = "{\n  \"mode\": \"" + normalizeMode(mode) + "\""
   if (weatherCode != null && isFinite(Number(weatherCode)))
     body += ",\n  \"weatherCode\": " + Number(weatherCode)
   body += ",\n  \"speed\": \"" + normalizeSpeed(speed) + "\""
+  body += ",\n  \"look\": \"" + normalizeLook(look) + "\""
+  body += ",\n  \"script\": \"" + normalizeScript(script) + "\""
   return body + "\n}\n"
 }
 
 function modeFileBody(mode) {
-  return stateFileBody(mode, null, "calm")
+  return stateFileBody(mode, null, "calm", "theme", "pixels")
 }
 
-function mergeState(raw, mode, weatherCode, speed) {
+function mergeState(raw, mode, weatherCode, speed, look, script) {
   var current = parseStateFile(raw)
   var nextMode = mode === undefined || mode === null || mode === "" ? current.mode : normalizeMode(mode)
   var nextCode = weatherCode != null && weatherCode !== "" && isFinite(Number(weatherCode))
     ? Number(weatherCode)
     : current.weatherCode
   var nextSpeed = speed === undefined || speed === null || speed === "" ? current.speed : normalizeSpeed(speed)
-  return { mode: nextMode, weatherCode: nextCode, speed: nextSpeed }
+  var nextLook = look === undefined || look === null || look === "" ? current.look : normalizeLook(look)
+  var nextScript = script === undefined || script === null || script === "" ? current.script : normalizeScript(script)
+  return { mode: nextMode, weatherCode: nextCode, speed: nextSpeed, look: nextLook, script: nextScript }
 }
 
 function cycleMode(mode) {
@@ -291,6 +374,8 @@ function blankCell() {
     vy: 0,
     baseVy: 0,
     trail: 1,
+    glyph: "",
+    tint: "",
     role: "muted",
     alpha: 0,
     startAlpha: 0,
@@ -332,9 +417,9 @@ function roleFor(index, rng) {
 }
 
 function alphaFor(role) {
-  if (role === "accent") return 0.88
-  if (role === "foreground") return 0.62
-  return 0.48
+  if (role === "accent") return 1
+  if (role === "foreground") return 0.9
+  return 0.78
 }
 
 function trailFor(role) {
@@ -371,8 +456,8 @@ function layerTrail(layer, role) {
 }
 
 function layerAlpha(layer) {
-  if (layer === 0) return 0.42
-  if (layer === 1) return 0.72
+  if (layer === 0) return 0.7
+  if (layer === 1) return 0.9
   return 1
 }
 
@@ -406,6 +491,8 @@ function paintDrop(cell, state, spec) {
   cell.startAlpha = cell.targetAlpha
   cell.bornY = spec.y
   cell.alpha = spec.y < 0 ? 0 : cell.targetAlpha
+  cell.glyph = spec.glyph || pickGlyph(state.rng)
+  cell.tint = spec.tint || pickPsychedelic(state.rng)
   cell.life = 1
   cell.maxLife = 1
 }
@@ -444,6 +531,7 @@ function spawnBurst(state, spec) {
   cell.startAlpha = spec.alpha
   cell.life = spec.life
   cell.maxLife = spec.life
+  cell.tint = spec.tint || ""
   return cell
 }
 
@@ -462,6 +550,7 @@ function splashFrom(state, drop) {
     spawnBurst(state, {
       kind: "splash",
       role: role,
+      tint: drop.tint,
       x: originX + (state.rng() - 0.5) * size * 3,
       y: originY,
       vx: (state.rng() - 0.5) * (layer === 0 ? 70 : 140),
@@ -478,6 +567,7 @@ function splashFrom(state, drop) {
       spawnBurst(state, {
         kind: "spark",
         role: "accent",
+        tint: drop.tint,
         x: originX + (state.rng() - 0.5) * size * 2,
         y: originY,
         vx: (state.rng() - 0.5) * 180,
@@ -655,6 +745,7 @@ function step(state, dt) {
         wrapDropX(state, cell)
       }
       fadeDrop(cell)
+      if (state.rng() < 0.05) cell.glyph = pickGlyph(state.rng)
       if (cell.y + cell.h >= state.height) splashFrom(state, cell)
       continue
     }
@@ -689,6 +780,15 @@ if (typeof module !== "undefined") {
     speedScale: speedScale,
     speedLabel: speedLabel,
     speedOptions: speedOptions,
+    normalizeLook: normalizeLook,
+    lookLabel: lookLabel,
+    lookOptions: lookOptions,
+    paletteHex: paletteHex,
+    pickPsychedelic: pickPsychedelic,
+    normalizeScript: normalizeScript,
+    cycleScript: cycleScript,
+    usesGlyphs: usesGlyphs,
+    pickGlyph: pickGlyph,
     configure: configure,
     weatherCodeFromPayload: weatherCodeFromPayload,
     windXFromPayload: windXFromPayload,

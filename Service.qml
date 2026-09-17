@@ -19,6 +19,9 @@ Item {
 
   property string mode: "auto"
   property string speed: "calm"
+  property string look: "theme"
+  property string script: "pixels"
+  readonly property bool useGlyphs: RainModel.usesGlyphs(look, script)
   property var weatherCode: null
   property real windX: 0
   property var location: ({ name: "", latitude: null, longitude: null })
@@ -33,7 +36,11 @@ Item {
     return n + (screen ? Math.round(screen.width || 0) : 0)
   }
 
-  function fillFor(role, alpha) {
+  function fillFor(role, alpha, tint) {
+    if (root.look === "psychedelic" && tint)
+      return Util.alpha(tint, alpha)
+    var hex = RainModel.paletteHex(root.look, role)
+    if (hex) return Util.alpha(hex, alpha)
     var base = role === "accent" ? Color.accent : Color.foreground
     return Util.alpha(base, alpha)
   }
@@ -64,10 +71,32 @@ Item {
     persistMode()
   }
 
+  function setLook(next) {
+    var look = RainModel.normalizeLook(next)
+    if (look === root.look) {
+      persistMode()
+      return
+    }
+    root.look = look
+    root.bumpConfig()
+    persistMode()
+  }
+
+  function setScript(next) {
+    var script = RainModel.normalizeScript(next)
+    if (script === root.script) {
+      persistMode()
+      return
+    }
+    root.script = script
+    root.bumpConfig()
+    persistMode()
+  }
+
   function persistMode() {
     if (!root.modeLoaded) return
     if (!mkdirProc.running) mkdirProc.running = true
-    modeFile.setText(RainModel.stateFileBody(root.mode, root.weatherCode, root.speed))
+    modeFile.setText(RainModel.stateFileBody(root.mode, root.weatherCode, root.speed, root.look, root.script))
   }
 
   function applyWeather(raw) {
@@ -110,13 +139,15 @@ Item {
     onFileChanged: reload()
     onLoaded: {
       var next = RainModel.parseStateFile(text())
-      var dirty = next.mode !== root.mode || next.speed !== root.speed
+      var dirty = next.mode !== root.mode || next.speed !== root.speed || next.look !== root.look || next.script !== root.script
       if (next.weatherCode != null && next.weatherCode !== root.weatherCode) {
         root.weatherCode = next.weatherCode
         dirty = true
       }
       root.mode = next.mode
       root.speed = next.speed
+      root.look = next.look
+      root.script = next.script
       root.modeLoaded = true
       if (dirty) root.bumpConfig()
     }
@@ -237,6 +268,8 @@ Item {
         function onConfigTickChanged() { panel.applyConfig() }
         function onModeChanged() { panel.applyConfig() }
         function onSpeedChanged() { panel.applyConfig() }
+        function onLookChanged() { panel.applyConfig() }
+        function onScriptChanged() { panel.applyConfig() }
       }
 
       Timer {
@@ -252,17 +285,32 @@ Item {
       Repeater {
         model: panel.sim && panel.tick >= 0 ? panel.sim.cells.length : 0
 
-        Rectangle {
+        Item {
           required property int index
           readonly property var cell: panel.sim ? panel.sim.cells[index] : null
           visible: panel.tick >= 0 && !!(cell && cell.alive && cell.alpha > 0.02)
           x: panel.tick >= 0 && cell ? Math.round(cell.x) : 0
           y: panel.tick >= 0 && cell ? Math.round(cell.y) : 0
-          width: panel.tick >= 0 && cell ? cell.w : 0
-          height: panel.tick >= 0 && cell ? cell.h : 0
+          width: panel.tick >= 0 && cell ? (root.useGlyphs && cell.kind === "drop" ? 16 : cell.w) : 0
+          height: panel.tick >= 0 && cell ? (root.useGlyphs && cell.kind === "drop" ? 18 : cell.h) : 0
           z: panel.tick >= 0 && cell ? cell.layer : 0
-          color: panel.tick >= 0 ? root.fillFor(cell ? cell.role : "muted", cell ? cell.alpha : 0) : "transparent"
-          antialiasing: false
+
+          Rectangle {
+            anchors.fill: parent
+            visible: !root.useGlyphs || (cell && cell.kind !== "drop")
+            color: root.look && panel.tick >= 0 ? root.fillFor(cell ? cell.role : "muted", cell ? cell.alpha : 0, cell ? cell.tint : "") : "transparent"
+            antialiasing: false
+          }
+
+          Text {
+            visible: root.useGlyphs && cell && cell.kind === "drop"
+            text: panel.tick >= 0 && cell && cell.glyph ? cell.glyph : "0"
+            color: root.fillFor(cell ? cell.role : "accent", 1, cell ? cell.tint : "")
+            font.family: "Noto Sans Mono CJK JP"
+            font.pixelSize: cell && cell.layer === 2 ? 18 : (cell && cell.layer === 1 ? 15 : 13)
+            font.bold: !!(cell && cell.role === "accent")
+            textFormat: Text.PlainText
+          }
         }
       }
     }

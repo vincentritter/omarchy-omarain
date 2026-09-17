@@ -4,7 +4,7 @@ Omarain is a quiet wallpaper overlay for Omarchy. Small squares fall in front of
 
 It sits on Hyprland’s bottom layer, so windows and the bar stay above it. The surface does not take clicks. Double-clicking the desktop still opens the wallpaper picker.
 
-The bar widget sets intensity (Off, Light, Steady, Heavy, Auto) and fall speed (Calm, Natural, Hyper-gravity). Auto keeps a living rain that wanders a little, then turns the volume up or down from the same location the weather widget uses. Right-click the icon to cycle intensity.
+The bar widget sets intensity (Off, Light, Steady, Heavy, Auto), fall speed (Calm, Natural, Hyper-gravity), and look (Theme, Psychedelic, Matrix, Amber). Psychedelic is a mixed neon field. Auto keeps a living rain that wanders a little, then turns the volume up or down from the same location the weather widget uses. Right-click the icon to cycle intensity.
 
 ## Install
 
