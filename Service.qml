@@ -25,6 +25,7 @@ Item {
   readonly property bool useGlyphs: RainModel.usesGlyphs(look, script)
   property var weatherCode: null
   property real windX: 0
+  property real tiltX: 0
   property var location: ({ name: "", latitude: null, longitude: null })
   property bool modeLoaded: false
   property bool pendingWeatherRefresh: false
@@ -101,6 +102,12 @@ Item {
     root.script = script
     root.bumpConfig()
     persistMode()
+  }
+
+  function applyTilt(raw) {
+    var accel = RainModel.parseAccelLine(raw)
+    if (!accel) return
+    root.tiltX = RainModel.smoothTilt(root.tiltX, RainModel.tiltXFromAccel(accel.x, accel.y, accel.z))
   }
 
   function persistMode() {
@@ -215,6 +222,22 @@ Item {
     onTriggered: modeFile.reload()
   }
 
+  Process {
+    id: tiltProc
+    command: ["sh", Qt.resolvedUrl("read-tilt").toString().replace(/^file:\/\//, "")]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.applyTilt(String(text || "").trim())
+    }
+  }
+
+  Timer {
+    interval: 80
+    running: true
+    repeat: true
+    onTriggered: if (!tiltProc.running) tiltProc.running = true
+  }
+
   Component.onCompleted: {
     mkdirProc.running = true
     Qt.callLater(root.refreshWeather)
@@ -301,6 +324,7 @@ Item {
         onTriggered: {
           var dt = frameTime
           if (!(dt > 0) || dt > 0.05) dt = 1 / 60
+          panel.sim.tiltX = root.tiltX
           RainModel.step(panel.sim, dt)
           panel.live = panel.sim.live
           panel.liveN = panel.sim.live.length

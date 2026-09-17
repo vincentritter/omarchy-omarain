@@ -236,6 +236,38 @@ function windXFromPayload(raw) {
   }
 }
 
+function parseAccelLine(raw) {
+  var parts = String(raw || "").replace(/^\s+|\s+$/g, "").split(/[\s,]+/)
+  if (parts.length < 3) return null
+  var x = Number(parts[0])
+  var y = Number(parts[1])
+  var z = Number(parts[2])
+  if (!isFinite(x) || !isFinite(y) || !isFinite(z)) return null
+  return { x: x, y: y, z: z }
+}
+
+function tiltXFromAccel(x, y, z) {
+  var ax = Number(x)
+  var ay = Number(y)
+  if (!isFinite(ax)) ax = 0
+  if (!isFinite(ay)) ay = 0
+  var lateral = Math.abs(ax) >= Math.abs(ay) ? ax : ay
+  var dead = 0.55
+  if (Math.abs(lateral) < dead) return 0
+  var mag = lateral > 0 ? lateral - dead : lateral + dead
+  if (mag > 8) mag = 8
+  if (mag < -8) mag = -8
+  return mag * 28
+}
+
+function smoothTilt(prev, next) {
+  var a = Number(prev)
+  var b = Number(next)
+  if (!isFinite(b)) return isFinite(a) ? a : 0
+  if (!isFinite(a)) return b
+  return a * 0.8 + b * 0.2
+}
+
 function layerWind(layer) {
   if (layer === 0) return 1
   if (layer === 1) return 0.58
@@ -805,6 +837,10 @@ function configure(state, options) {
     var wind = Number(options.windX)
     state.windX = isFinite(wind) ? wind : 0
   }
+  if (options.tiltX !== undefined) {
+    var tilt = Number(options.tiltX)
+    state.tiltX = isFinite(tilt) ? tilt : 0
+  }
   if (options.speed !== undefined) setSpeed(state, options.speed)
   if (options.look !== undefined) state.look = normalizeLook(options.look)
   if (options.script !== undefined) state.script = normalizeScript(options.script)
@@ -823,6 +859,7 @@ function createState(width, height, options) {
     mode: mode,
     weatherCode: options.weatherCode == null ? null : Number(options.weatherCode),
     windX: options.windX == null ? 0 : Number(options.windX),
+    tiltX: options.tiltX == null ? 0 : Number(options.tiltX),
     speed: normalizeSpeed(options.speed || "calm"),
     look: normalizeLook(options.look || "theme"),
     script: normalizeScript(options.script || defaultScriptForLook(options.look || "theme")),
@@ -836,6 +873,7 @@ function createState(width, height, options) {
   }
   if (!isFinite(state.weatherCode)) state.weatherCode = null
   if (!isFinite(state.windX)) state.windX = 0
+  if (!isFinite(state.tiltX)) state.tiltX = 0
   syncIntensity(state, true)
   gatherLive(state)
   return state
@@ -874,7 +912,7 @@ function step(state, dt) {
   }
   easeDropTarget(state, dt)
   var fieldScale = speedScale(state.speed)
-  var wind = state.windX || 0
+  var wind = (state.windX || 0) + (state.tiltX || 0)
   for (var i = 0; i < state.cells.length; i++) {
     var cell = state.cells[i]
     if (!cell.alive) continue
@@ -975,6 +1013,9 @@ if (typeof module !== "undefined") {
     configure: configure,
     weatherCodeFromPayload: weatherCodeFromPayload,
     windXFromPayload: windXFromPayload,
+    parseAccelLine: parseAccelLine,
+    tiltXFromAccel: tiltXFromAccel,
+    smoothTilt: smoothTilt,
     parseLocationFile: parseLocationFile,
     parseStateFile: parseStateFile,
     parseModeFile: parseModeFile,

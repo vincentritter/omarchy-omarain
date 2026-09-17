@@ -279,6 +279,16 @@ test("new drops fade in over the first stretch of fall", () => {
   assert.ok(drop.alpha >= drop.targetAlpha * 0.99)
 })
 
+test("tilt from accelerometer ignores rest and leans when the machine tips", () => {
+  assert.equal(RainModel.tiltXFromAccel(0, 0, 9.81), 0)
+  assert.equal(RainModel.tiltXFromAccel(0.2, 0, 9.8), 0)
+  assert.ok(RainModel.tiltXFromAccel(3, 0, 9) > 0)
+  assert.ok(RainModel.tiltXFromAccel(-3, 0, 9) < 0)
+  const parsed = RainModel.parseAccelLine("1.25 -0.40 9.60")
+  assert.equal(parsed.x, 1.25)
+  assert.ok(Math.abs(RainModel.smoothTilt(0, 100) - 20) < 0.01)
+})
+
 test("west wind leans far drops more than near drops", () => {
   const windX = RainModel.windXFromPayload(JSON.stringify({
     current: { weather_code: 3, wind_speed_10m: 24, wind_direction_10m: 270 }
