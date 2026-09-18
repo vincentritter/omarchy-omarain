@@ -35,7 +35,6 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  readonly property string rainGlyph: ""
   readonly property string heroStatusText: {
     if (mode === "auto") return RainModel.weatherHint(weatherCode)
     if (mode === "off") return "Paused"
@@ -281,10 +280,18 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.rainGlyph
     slotSize: Style.bar.iconSlot
     tooltipText: "Omarain"
     dimmed: root.mode === "off"
+    iconComponent: Component {
+      Item {
+        OmarainIcon {
+          anchors.centerIn: parent
+          iconSize: Style.bar.iconCanvas
+          color: root.bar.foreground
+        }
+      }
+    }
     onPressed: function(b) {
       if (b === Qt.RightButton) root.toggleRain()
       else root.toggle()
@@ -322,15 +329,13 @@ Panel {
           width: parent.width
           implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight)
 
-          Text {
+          OmarainIcon {
             id: heroIcon
-            textFormat: Text.PlainText
-            text: root.rainGlyph
-            color: root.bar.foreground
-            font.family: root.bar.fontFamily
-            font.pixelSize: Style.font.display
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
+            iconSize: Style.space(32)
+            color: root.bar.foreground
+            opacity: root.mode === "off" ? 0.45 : 1
           }
 
           Column {
