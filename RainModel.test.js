@@ -432,7 +432,7 @@ test("mode file stores a known mode", () => {
   assert.equal(RainModel.parseStateFile("").resumeMode, "auto")
   assert.equal(
     RainModel.stateFileBody("heavy", 80, "calm", "theme", "pixels", "heavy"),
-    '{\n  "mode": "heavy",\n  "weatherCode": 80,\n  "speed": "calm",\n  "look": "theme",\n  "script": "pixels",\n  "resumeMode": "heavy"\n}\n'
+    '{\n  "mode": "heavy",\n  "weatherCode": 80,\n  "speed": "calm",\n  "look": "theme",\n  "script": "pixels",\n  "resumeMode": "heavy",\n  "intensity": "heavy"\n}\n'
   )
 })
 
@@ -459,6 +459,100 @@ test("mergeState keeps an existing weather code when a mode write omits it", () 
   assert.equal(look.look, "amber")
   const script = RainModel.mergeState('{\n  "script": "glyphs"\n}\n', "auto", null, null, null, null)
   assert.equal(script.script, "glyphs")
+})
+
+test("intensity options are the four manual levels", () => {
+  assert.deepEqual(RainModel.intensityOptions().map(function (option) {
+    return option.value
+  }), ["light", "steady", "heavy", "torrential"])
+})
+
+test("normalizeIntensity keeps a manual level and defaults the rest to steady", () => {
+  assert.equal(RainModel.normalizeIntensity("heavy"), "heavy")
+  assert.equal(RainModel.normalizeIntensity("LIGHT"), "light")
+  assert.equal(RainModel.normalizeIntensity("auto"), "steady")
+  assert.equal(RainModel.normalizeIntensity("off"), "steady")
+  assert.equal(RainModel.normalizeIntensity(""), "steady")
+})
+
+test("intensity index maps slider ticks onto manual levels", () => {
+  assert.equal(RainModel.intensityIndex("light"), 0)
+  assert.equal(RainModel.intensityIndex("steady"), 1)
+  assert.equal(RainModel.intensityIndex("torrential"), 3)
+  assert.equal(RainModel.intensityFromIndex(2), "heavy")
+  assert.equal(RainModel.intensityFromIndex(-1), "light")
+  assert.equal(RainModel.intensityFromIndex(99), "torrential")
+})
+
+test("state file remembers last manual intensity beside auto", () => {
+  const parsed = RainModel.parseStateFile('{"mode":"auto","intensity":"heavy"}')
+  assert.equal(parsed.mode, "auto")
+  assert.equal(parsed.intensity, "heavy")
+  const fromMode = RainModel.parseStateFile('{"mode":"light"}')
+  assert.equal(fromMode.intensity, "light")
+  const empty = RainModel.parseStateFile("")
+  assert.equal(empty.intensity, "steady")
+  const paused = RainModel.parseStateFile('{"mode":"off","resumeMode":"auto","intensity":"torrential"}')
+  assert.equal(paused.intensity, "torrential")
+  const pausedUpgrade = RainModel.parseStateFile('{"mode":"off","resumeMode":"heavy"}')
+  assert.equal(pausedUpgrade.intensity, "heavy")
+})
+
+test("follow weather is auto while raining and armed resume while paused", () => {
+  assert.equal(RainModel.followWeatherActive("auto", "auto"), true)
+  assert.equal(RainModel.followWeatherActive("off", "auto"), true)
+  assert.equal(RainModel.followWeatherActive("off", "heavy"), false)
+  assert.equal(RainModel.followWeatherActive("heavy", "heavy"), false)
+})
+
+test("applying follow weather keeps last intensity and arms auto", () => {
+  const on = RainModel.applyFollowWeather({ mode: "heavy", intensity: "heavy", resumeMode: "heavy" }, true)
+  assert.equal(on.mode, "auto")
+  assert.equal(on.intensity, "heavy")
+  assert.equal(on.resumeMode, "auto")
+  const off = RainModel.applyFollowWeather({ mode: "auto", intensity: "heavy", resumeMode: "auto" }, false)
+  assert.equal(off.mode, "heavy")
+  assert.equal(off.intensity, "heavy")
+  const paused = RainModel.applyFollowWeather({ mode: "off", intensity: "light", resumeMode: "light" }, true)
+  assert.equal(paused.mode, "off")
+  assert.equal(paused.resumeMode, "auto")
+  assert.equal(paused.intensity, "light")
+})
+
+test("choosing an intensity leaves auto and stores the level", () => {
+  const fromAuto = RainModel.applyIntensityChoice({
+    mode: "auto",
+    intensity: "steady",
+    resumeMode: "auto"
+  }, "torrential")
+  assert.equal(fromAuto.mode, "torrential")
+  assert.equal(fromAuto.intensity, "torrential")
+  assert.equal(fromAuto.resumeMode, "torrential")
+  const paused = RainModel.applyIntensityChoice({
+    mode: "off",
+    intensity: "steady",
+    resumeMode: "auto"
+  }, "light")
+  assert.equal(paused.mode, "off")
+  assert.equal(paused.intensity, "light")
+  assert.equal(paused.resumeMode, "light")
+})
+
+test("speed chips use Hyper as the short label", () => {
+  assert.equal(RainModel.speedOptions()[2].label, "Hyper")
+  assert.equal(RainModel.speedOptions()[2].tooltip, "Hyper-gravity")
+  assert.equal(RainModel.speedLabel("hyper"), "Hyper-gravity")
+})
+
+test("look swatch uses the palette accent", () => {
+  assert.equal(RainModel.lookSwatch("theme"), "")
+  assert.equal(RainModel.lookSwatch("amber"), RainModel.paletteHex("amber", "accent"))
+  assert.equal(RainModel.lookSwatch("matrix"), RainModel.paletteHex("matrix", "accent"))
+})
+
+test("matrix look keeps glyphs on the extra panel section", () => {
+  assert.deepEqual(RainModel.panelSections("theme"), ["power", "weather", "intensity", "speed", "look"])
+  assert.deepEqual(RainModel.panelSections("matrix"), ["power", "weather", "intensity", "speed", "look", "glyphs"])
 })
 
 test("matrix script cycles between pixels and glyphs", () => {

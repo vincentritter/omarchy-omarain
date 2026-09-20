@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -13,21 +14,24 @@ Panel {
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string modePath: home + "/.local/state/omarchy/omarain.json"
-  readonly property var modes: RainModel.modeOptions()
   readonly property var speeds: RainModel.speedOptions()
   readonly property var looks: RainModel.lookOptions()
-  readonly property var sections: ["intensity", "speed", "look"]
+  readonly property var sections: RainModel.panelSections(look)
+  readonly property color foreground: bar ? bar.foreground : Color.foreground
+  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+  readonly property bool followWeather: RainModel.followWeatherActive(mode, resumeMode)
+  readonly property bool headerHasCursor: cursorActive && focusSection === "power"
+  readonly property string toggleHint: mode === "off" ? "Turn rain on" : "Turn rain off"
   property string mode: "auto"
   property string speed: "calm"
   property string look: "theme"
   property string script: "pixels"
   property string resumeMode: "auto"
-  property double matrixClickAt: 0
+  property string intensity: "steady"
   property var weatherCode: null
-  property int cursorIndex: 0
   property int speedIndex: 0
   property int lookIndex: 0
-  property string focusSection: "intensity"
+  property string focusSection: "power"
   property bool cursorActive: false
 
   readonly property var sharedService: bar && bar.shell && typeof bar.shell.serviceFor === "function"
@@ -41,11 +45,22 @@ Panel {
     return RainModel.modeLabel(mode) + " rain"
   }
 
-  function selectedIndex() {
-    for (var i = 0; i < modes.length; i++) {
-      if (modes[i].value === mode) return i
-    }
-    return 0
+  function persistMerged(merged) {
+    root.mode = merged.mode
+    root.speed = merged.speed
+    root.look = merged.look
+    root.script = merged.script
+    root.resumeMode = merged.resumeMode
+    root.intensity = merged.intensity
+    root.weatherCode = merged.weatherCode
+    speedIndex = selectedSpeedIndex()
+    lookIndex = selectedLookIndex()
+    if (root.look !== "matrix" && root.focusSection === "glyphs")
+      root.focusSection = "look"
+    if (!mkdirProc.running) mkdirProc.running = true
+    modeFile.setText(RainModel.stateFileBody(merged.mode, merged.weatherCode, merged.speed, merged.look, merged.script, merged.resumeMode, merged.intensity))
+    if (sharedService && typeof sharedService.syncFromPanel === "function")
+      sharedService.syncFromPanel(merged)
   }
 
   function selectedSpeedIndex() {
@@ -53,20 +68,6 @@ Panel {
       if (speeds[i].value === speed) return i
     }
     return 0
-  }
-
-  function persistMerged(merged) {
-    root.mode = merged.mode
-    root.speed = merged.speed
-    root.look = merged.look
-    root.script = merged.script
-    root.resumeMode = merged.resumeMode
-    root.weatherCode = merged.weatherCode
-    cursorIndex = selectedIndex()
-    speedIndex = selectedSpeedIndex()
-    lookIndex = selectedLookIndex()
-    if (!mkdirProc.running) mkdirProc.running = true
-    modeFile.setText(RainModel.stateFileBody(merged.mode, merged.weatherCode, merged.speed, merged.look, merged.script, merged.resumeMode))
   }
 
   function selectedLookIndex() {
@@ -77,44 +78,47 @@ Panel {
   }
 
   function setMode(next) {
-    var merged = RainModel.mergeState(modeFile.text(), next, root.weatherCode, root.speed, root.look, root.script)
+    var merged = RainModel.mergeState(modeFile.text(), next, root.weatherCode, root.speed, root.look, root.script, root.resumeMode, root.intensity)
     persistMerged(merged)
-    if (sharedService && typeof sharedService.setMode === "function")
-      sharedService.setMode(merged.mode)
+  }
+
+  function setFollowWeather(follow) {
+    var applied = RainModel.applyFollowWeather({
+      mode: root.mode,
+      intensity: root.intensity,
+      resumeMode: root.resumeMode
+    }, follow)
+    var merged = RainModel.mergeState(modeFile.text(), applied.mode, root.weatherCode, root.speed, root.look, root.script, applied.resumeMode, applied.intensity)
+    persistMerged(merged)
+  }
+
+  function setIntensity(next) {
+    var applied = RainModel.applyIntensityChoice({
+      mode: root.mode,
+      intensity: root.intensity,
+      resumeMode: root.resumeMode
+    }, next)
+    var merged = RainModel.mergeState(modeFile.text(), applied.mode, root.weatherCode, root.speed, root.look, root.script, applied.resumeMode, applied.intensity)
+    persistMerged(merged)
   }
 
   function setSpeed(next) {
-    var merged = RainModel.mergeState(modeFile.text(), root.mode, root.weatherCode, next, root.look, root.script)
+    var merged = RainModel.mergeState(modeFile.text(), root.mode, root.weatherCode, next, root.look, root.script, root.resumeMode, root.intensity)
     persistMerged(merged)
-    if (sharedService && typeof sharedService.setSpeed === "function")
-      sharedService.setSpeed(merged.speed)
   }
 
   function setLook(next) {
     var look = RainModel.normalizeLook(next)
-    var script = look === "matrix" ? "glyphs" : root.script
-    var merged = RainModel.mergeState(modeFile.text(), root.mode, root.weatherCode, root.speed, look, script)
+    var script = root.script
+    if (look === "matrix" && root.look !== "matrix") script = "glyphs"
+    var merged = RainModel.mergeState(modeFile.text(), root.mode, root.weatherCode, root.speed, look, script, root.resumeMode, root.intensity)
     persistMerged(merged)
-    if (sharedService && typeof sharedService.setLook === "function")
-      sharedService.setLook(merged.look)
-    if (sharedService && typeof sharedService.setScript === "function")
-      sharedService.setScript(merged.script)
   }
 
-  function toggleMatrixScript() {
-    var merged = RainModel.mergeState(
-      modeFile.text(),
-      "matrix",
-      root.weatherCode,
-      root.speed,
-      "matrix",
-      RainModel.cycleScript(root.script)
-    )
+  function setGlyphs(on) {
+    if (root.look !== "matrix") return
+    var merged = RainModel.mergeState(modeFile.text(), root.mode, root.weatherCode, root.speed, "matrix", on ? "glyphs" : "pixels", root.resumeMode, root.intensity)
     persistMerged(merged)
-    if (sharedService && typeof sharedService.setLook === "function")
-      sharedService.setLook("matrix")
-    if (sharedService && typeof sharedService.setScript === "function")
-      sharedService.setScript(merged.script)
   }
 
   function cycleMode() {
@@ -123,20 +127,23 @@ Panel {
 
   function toggleRain() {
     var next = RainModel.toggleOnOff(root.mode, root.resumeMode)
-    var merged = RainModel.mergeState(modeFile.text(), next.mode, root.weatherCode, root.speed, root.look, root.script, next.resumeMode)
+    var merged = RainModel.mergeState(modeFile.text(), next.mode, root.weatherCode, root.speed, root.look, root.script, next.resumeMode, root.intensity)
     persistMerged(merged)
-    if (sharedService && typeof sharedService.setMode === "function")
-      sharedService.setMode(merged.mode)
+  }
+
+  function clampSection() {
+    if (sections.indexOf(focusSection) >= 0) return
+    focusSection = sections[0]
   }
 
   function moveCursor(dx, dy) {
     if (!cursorActive) {
       cursorActive = true
-      cursorIndex = selectedIndex()
       speedIndex = selectedSpeedIndex()
       lookIndex = selectedLookIndex()
       return
     }
+    clampSection()
     if (dy !== 0) {
       var section = sections.indexOf(focusSection)
       if (section < 0) section = 0
@@ -160,14 +167,26 @@ Panel {
       lookIndex = l
       return
     }
-    var next = cursorIndex + dx
-    if (next < 0) next = 0
-    if (next > modes.length - 1) next = modes.length - 1
-    cursorIndex = next
+    if (focusSection === "intensity" && !root.followWeather) {
+      setIntensity(RainModel.intensityFromIndex(RainModel.intensityIndex(root.intensity) + dx))
+    }
   }
 
   function activateCursor() {
     if (!cursorActive) return
+    clampSection()
+    if (focusSection === "power") {
+      toggleRain()
+      return
+    }
+    if (focusSection === "weather") {
+      setFollowWeather(!root.followWeather)
+      return
+    }
+    if (focusSection === "glyphs") {
+      setGlyphs(RainModel.normalizeScript(root.script) !== "glyphs")
+      return
+    }
     if (focusSection === "speed") {
       if (speedIndex < 0 || speedIndex >= speeds.length) return
       setSpeed(speeds[speedIndex].value)
@@ -176,10 +195,7 @@ Panel {
     if (focusSection === "look") {
       if (lookIndex < 0 || lookIndex >= looks.length) return
       setLook(looks[lookIndex].value)
-      return
     }
-    if (cursorIndex < 0 || cursorIndex >= modes.length) return
-    setMode(modes[cursorIndex].value)
   }
 
   IpcHandler {
@@ -210,7 +226,6 @@ Panel {
       var next = RainModel.parseStateFile(text())
       if (next.mode !== root.mode) {
         root.mode = next.mode
-        if (!root.opened) root.cursorIndex = root.selectedIndex()
       }
       if (next.weatherCode != null) root.weatherCode = next.weatherCode
       root.speed = next.speed
@@ -219,6 +234,7 @@ Panel {
       if (!root.opened) root.lookIndex = root.selectedLookIndex()
       root.script = next.script
       root.resumeMode = next.resumeMode
+      root.intensity = next.intensity
     }
     onLoadFailed: root.mode = "auto"
   }
@@ -228,7 +244,6 @@ Panel {
     function onModeChanged() {
       if (!sharedService) return
       root.mode = RainModel.normalizeMode(sharedService.mode)
-      if (!root.opened) root.cursorIndex = root.selectedIndex()
     }
     function onWeatherCodeChanged() {
       if (sharedService) root.weatherCode = sharedService.weatherCode
@@ -251,24 +266,25 @@ Panel {
     repeat: true
     onTriggered: {
       var next = RainModel.normalizeMode(sharedService.mode)
-      if (next !== root.mode) {
-        root.mode = next
-        if (!root.opened) root.cursorIndex = root.selectedIndex()
-      }
+      if (next !== root.mode) root.mode = next
       root.weatherCode = sharedService.weatherCode
       root.speed = RainModel.normalizeSpeed(sharedService.speed)
       root.look = RainModel.normalizeLook(sharedService.look)
+      root.script = RainModel.normalizeScript(sharedService.script)
+      root.resumeMode = RainModel.normalizeMode(sharedService.resumeMode)
+      root.intensity = RainModel.normalizeIntensity(sharedService.intensity)
     }
   }
 
   Component.onCompleted: {
-    cursorIndex = selectedIndex()
     if (sharedService) {
       mode = RainModel.normalizeMode(sharedService.mode)
       weatherCode = sharedService.weatherCode
       speed = RainModel.normalizeSpeed(sharedService.speed)
       look = RainModel.normalizeLook(sharedService.look)
-      cursorIndex = selectedIndex()
+      script = RainModel.normalizeScript(sharedService.script)
+      resumeMode = RainModel.normalizeMode(sharedService.resumeMode)
+      intensity = RainModel.normalizeIntensity(sharedService.intensity)
       speedIndex = selectedSpeedIndex()
       lookIndex = selectedLookIndex()
     } else {
@@ -305,8 +321,8 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(520))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight)
+    contentWidth: panel.fittedContentWidth(Style.space(380))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(560))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -318,205 +334,284 @@ Panel {
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
-      Column {
-        id: column
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        spacing: Style.space(14)
+      Flickable {
+        id: panelFlick
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: column.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        interactive: contentHeight > height
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-        Item {
-          width: parent.width
-          implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight)
+        Column {
+          id: column
+          width: panelFlick.width
+          spacing: Style.space(12)
 
-          OmarainIcon {
-            id: heroIcon
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            iconSize: Style.space(32)
-            color: root.bar.foreground
-            opacity: root.mode === "off" ? 0.45 : 1
+          Item {
+            id: header
+            width: parent.width
+            implicitHeight: hero.implicitHeight
+            readonly property bool ringVisible: root.headerHasCursor
+            function focusHero() {
+              root.cursorActive = true
+              root.focusSection = "power"
+            }
+
+            PanelHero {
+              id: hero
+              width: parent.width
+              title: "Omarain"
+              meta: root.heroStatusText
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              iconOpacity: root.mode === "off" ? 0.45 : 1
+              iconComponent: Component {
+                OmarainIcon {
+                  iconSize: Style.font.display
+                  color: root.foreground
+                }
+              }
+              trailingControl: Component {
+                ToggleSwitch {
+                  id: powerSwitch
+                  checked: root.mode !== "off"
+                  hasCursor: header.ringVisible
+                  foreground: hero.foreground
+                  onHovered: function(on) { if (on) header.focusHero() }
+                  onToggled: root.toggleRain()
+
+                  PanelToolTip {
+                    visible: powerSwitch.containsMouse
+                    text: root.toggleHint
+                    fontFamily: hero.fontFamily
+                  }
+                }
+              }
+            }
+          }
+
+          PanelSeparator {
+            foreground: root.foreground
+          }
+
+          Toggle {
+            width: parent.width
+            label: "Follow weather"
+            description: "Rain when the forecast is wet."
+            checked: root.followWeather
+            hasCursor: root.cursorActive && root.focusSection === "weather"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: root.setFollowWeather(!root.followWeather)
+            onHovered: function(h) {
+              if (h) {
+                root.cursorActive = true
+                root.focusSection = "weather"
+              }
+            }
           }
 
           Column {
-            id: heroLabels
-            anchors.left: heroIcon.right
-            anchors.leftMargin: Style.space(14)
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(2)
-
-            Text {
-              text: "Omarain"
-              color: root.bar.foreground
-              font.family: root.bar.fontFamily
-              font.pixelSize: Style.font.title
-              font.bold: true
-              elide: Text.ElideRight
-              width: parent.width
-            }
-
-            Text {
-              textFormat: Text.PlainText
-              text: root.heroStatusText.toUpperCase()
-              color: Qt.darker(root.bar.foreground, 1.4)
-              font.family: root.bar.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
-              font.letterSpacing: 1.2
-              elide: Text.ElideRight
-              width: parent.width
-            }
-          }
-        }
-
-        PanelSeparator {
-          foreground: root.bar.foreground
-        }
-
-        Column {
-          width: parent.width
-          spacing: Style.space(10)
-
-          PanelSectionHeader {
-            text: "INTENSITY"
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
-          }
-
-          Row {
-            id: modeRow
             width: parent.width
             spacing: Style.space(6)
 
-            readonly property real cellWidth: (width - spacing * (root.modes.length - 1)) / root.modes.length
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(intensityHeader.implicitHeight, intensityValue.implicitHeight)
 
-            Repeater {
-              model: root.modes
-              Button {
-                required property var modelData
-                required property int index
-                width: modeRow.cellWidth
-                text: modelData.label
-                fontSize: Style.font.bodySmall
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                horizontalPadding: Style.spacing.controlPaddingX
-                verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-                bordered: true
-                active: root.mode === modelData.value
-                hasCursor: root.cursorActive && root.focusSection === "intensity" && root.cursorIndex === index
-                onClicked: root.setMode(modelData.value)
-                onHovered: function(h) {
-                  if (h) {
-                    root.cursorActive = true
-                    root.focusSection = "intensity"
-                    root.cursorIndex = index
+              PanelSectionHeader {
+                id: intensityHeader
+                text: "INTENSITY"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              Text {
+                id: intensityValue
+                textFormat: Text.PlainText
+                text: RainModel.modeLabel(root.intensity)
+                color: Qt.darker(root.foreground, 1.4)
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(6)
+                anchors.verticalCenter: parent.verticalCenter
+                opacity: root.followWeather ? 0.5 : 1
+              }
+            }
+
+            CursorSurface {
+              id: intensitySliderRow
+              width: parent.width
+              height: intensitySlider.implicitHeight + Style.spacing.controlGap
+              hasCursor: root.cursorActive && root.focusSection === "intensity"
+              foreground: root.foreground
+              outline: true
+              opacity: root.followWeather ? 0.5 : 1
+
+              PanelSlider {
+                id: intensitySlider
+                bar: root.bar
+                anchors.fill: parent
+                anchors.leftMargin: Style.space(6)
+                anchors.rightMargin: Style.space(6)
+                minimum: 0
+                maximum: 3
+                step: 1
+                integer: true
+                tickCount: 4
+                value: RainModel.intensityIndex(root.intensity)
+                enabled: !root.followWeather
+                onMoved: function(v) {
+                  root.setIntensity(RainModel.intensityFromIndex(v))
+                }
+              }
+
+              HoverHandler {
+                onHoveredChanged: if (hovered) {
+                  root.cursorActive = true
+                  root.focusSection = "intensity"
+                }
+              }
+            }
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(10)
+
+            PanelSectionHeader {
+              text: "SPEED"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            Row {
+              id: speedRow
+              width: parent.width
+              spacing: Style.space(6)
+
+              readonly property real cellWidth: (width - spacing * (root.speeds.length - 1)) / root.speeds.length
+
+              Repeater {
+                model: root.speeds
+                Button {
+                  required property var modelData
+                  required property int index
+                  width: speedRow.cellWidth
+                  text: modelData.label
+                  tooltipText: modelData.tooltip || ""
+                  fontSize: Style.font.bodySmall
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  horizontalPadding: Style.spacing.controlPaddingX
+                  verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
+                  bordered: true
+                  active: root.speed === modelData.value
+                  hasCursor: root.cursorActive && root.focusSection === "speed" && root.speedIndex === index
+                  onClicked: root.setSpeed(modelData.value)
+                  onHovered: function(h) {
+                    if (h) {
+                      root.cursorActive = true
+                      root.focusSection = "speed"
+                      root.speedIndex = index
+                    }
                   }
                 }
               }
             }
           }
-        }
 
-        Column {
-          width: parent.width
-          spacing: Style.space(10)
-
-          PanelSectionHeader {
-            text: "SPEED"
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
-          }
-
-          Row {
-            id: speedRow
+          Column {
             width: parent.width
-            spacing: Style.space(6)
+            spacing: Style.space(10)
 
-            readonly property real cellWidth: (width - spacing * (root.speeds.length - 1)) / root.speeds.length
+            PanelSectionHeader {
+              text: "LOOK"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
 
-            Repeater {
-              model: root.speeds
-              Button {
-                required property var modelData
-                required property int index
-                width: speedRow.cellWidth
-                text: modelData.label
-                fontSize: Style.font.bodySmall
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                horizontalPadding: Style.spacing.controlPaddingX
-                verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-                bordered: true
-                active: root.speed === modelData.value
-                hasCursor: root.cursorActive && root.focusSection === "speed" && root.speedIndex === index
-                onClicked: root.setSpeed(modelData.value)
-                onHovered: function(h) {
-                  if (h) {
-                    root.cursorActive = true
-                    root.focusSection = "speed"
-                    root.speedIndex = index
+            Row {
+              id: lookRow
+              width: parent.width
+              spacing: Style.space(6)
+
+              readonly property real cellWidth: (width - spacing * (root.looks.length - 1)) / root.looks.length
+
+              Repeater {
+                model: root.looks
+                Item {
+                  required property var modelData
+                  required property int index
+                  width: lookRow.cellWidth
+                  implicitHeight: lookChip.implicitHeight
+                  height: lookChip.implicitHeight
+
+                  Button {
+                    id: lookChip
+                    width: parent.width
+                    text: modelData.label
+                    tooltipText: modelData.tooltip || ""
+                    fontSize: Style.font.caption
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    horizontalPadding: Style.space(6)
+                    verticalPadding: Style.spacing.controlPaddingY + Style.space(4)
+                    bordered: true
+                    active: root.look === modelData.value
+                    hasCursor: root.cursorActive && root.focusSection === "look" && root.lookIndex === index
+                    onClicked: root.setLook(modelData.value)
+                    onHovered: function(h) {
+                      if (h) {
+                        root.cursorActive = true
+                        root.focusSection = "look"
+                        root.lookIndex = index
+                      }
+                    }
+                  }
+
+                  Rectangle {
+                    anchors.left: lookChip.left
+                    anchors.right: lookChip.right
+                    anchors.bottom: lookChip.bottom
+                    anchors.leftMargin: Style.space(8)
+                    anchors.rightMargin: Style.space(8)
+                    anchors.bottomMargin: Style.space(5)
+                    height: 2
+                    radius: 1
+                    enabled: false
+                    color: {
+                      var hex = RainModel.lookSwatch(modelData.value)
+                      return hex !== "" ? hex : root.foreground
+                    }
+                    opacity: root.look === modelData.value ? 1 : 0.55
                   }
                 }
               }
             }
           }
-        }
 
-        Column {
-          width: parent.width
-          spacing: Style.space(10)
-
-          PanelSectionHeader {
-            text: "LOOK"
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
-          }
-
-          Row {
-            id: lookRow
+          Toggle {
+            visible: root.look === "matrix"
             width: parent.width
-            spacing: Style.space(6)
-
-            readonly property real cellWidth: (width - spacing * (root.looks.length - 1)) / root.looks.length
-
-            Repeater {
-              model: root.looks
-              Button {
-                required property var modelData
-                required property int index
-                width: lookRow.cellWidth
-                text: modelData.label
-                fontSize: Style.font.bodySmall
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                horizontalPadding: Style.spacing.controlPaddingX
-                verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-                bordered: true
-                active: root.look === modelData.value
-                hasCursor: root.cursorActive && root.focusSection === "look" && root.lookIndex === index
-                onClicked: {
-                  if (modelData.value !== "matrix") {
-                    root.setLook(modelData.value)
-                    return
-                  }
-                  var now = Date.now()
-                  if (root.look === "matrix" && now - root.matrixClickAt < 400) {
-                    root.toggleMatrixScript()
-                    root.matrixClickAt = 0
-                    return
-                  }
-                  root.matrixClickAt = now
-                  if (root.look !== "matrix") root.setLook("matrix")
-                }
-                onHovered: function(h) {
-                  if (h) {
-                    root.cursorActive = true
-                    root.focusSection = "look"
-                    root.lookIndex = index
-                  }
-                }
+            label: "Glyphs"
+            description: "Fall as Matrix characters instead of pixels."
+            checked: RainModel.usesGlyphs(root.look, root.script)
+            hasCursor: root.cursorActive && root.focusSection === "glyphs"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: root.setGlyphs(!RainModel.usesGlyphs(root.look, root.script))
+            onHovered: function(h) {
+              if (h) {
+                root.cursorActive = true
+                root.focusSection = "glyphs"
               }
             }
           }

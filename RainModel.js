@@ -49,7 +49,7 @@ function speedOptions() {
   return [
     { value: "calm", label: "Calm" },
     { value: "natural", label: "Natural" },
-    { value: "hyper", label: "Hyper-gravity" }
+    { value: "hyper", label: "Hyper", tooltip: "Hyper-gravity" }
   ]
 }
 
@@ -147,6 +147,12 @@ function paletteHex(look, role) {
   if (role === "accent") return palette.accent
   if (role === "muted") return palette.muted
   return palette.foreground
+}
+
+function lookSwatch(look) {
+  look = normalizeLook(look)
+  if (look === "theme") return ""
+  return paletteHex(look, "accent")
 }
 
 function normalizeMode(value) {
@@ -373,7 +379,15 @@ function parseLocationFile(raw) {
 }
 
 function parseStateFile(raw) {
-  var out = { mode: "auto", weatherCode: null, speed: "calm", look: "theme", script: "pixels", resumeMode: "auto" }
+  var out = {
+    mode: "auto",
+    weatherCode: null,
+    speed: "calm",
+    look: "theme",
+    script: "pixels",
+    resumeMode: "auto",
+    intensity: "steady"
+  }
   try {
     var data = JSON.parse(String(raw || ""))
     if (!data || typeof data !== "object") return out
@@ -391,6 +405,10 @@ function parseStateFile(raw) {
     var resume = normalizeMode(data.resumeMode)
     out.resumeMode = resume === "off" ? "auto" : resume
     if (out.mode !== "off") out.resumeMode = out.mode
+    out.intensity = normalizeIntensity(data.intensity)
+    if (isManualIntensity(out.mode)) out.intensity = out.mode
+    else if ((data.intensity == null || data.intensity === "") && out.mode === "off" && isManualIntensity(out.resumeMode))
+      out.intensity = out.resumeMode
     return out
   } catch (e) {
     return out
@@ -401,11 +419,13 @@ function parseModeFile(raw) {
   return parseStateFile(raw).mode
 }
 
-function stateFileBody(mode, weatherCode, speed, look, script, resumeMode) {
+function stateFileBody(mode, weatherCode, speed, look, script, resumeMode, intensity) {
   var nextMode = normalizeMode(mode)
   var resume = normalizeMode(resumeMode)
   if (resume === "off") resume = "auto"
   if (nextMode !== "off") resume = nextMode
+  var nextIntensity = normalizeIntensity(intensity)
+  if (isManualIntensity(nextMode)) nextIntensity = nextMode
   var body = "{\n  \"mode\": \"" + nextMode + "\""
   if (weatherCode != null && isFinite(Number(weatherCode)))
     body += ",\n  \"weatherCode\": " + Number(weatherCode)
@@ -413,6 +433,7 @@ function stateFileBody(mode, weatherCode, speed, look, script, resumeMode) {
   body += ",\n  \"look\": \"" + normalizeLook(look) + "\""
   body += ",\n  \"script\": \"" + normalizeScript(script) + "\""
   body += ",\n  \"resumeMode\": \"" + resume + "\""
+  body += ",\n  \"intensity\": \"" + nextIntensity + "\""
   return body + "\n}\n"
 }
 
@@ -420,7 +441,7 @@ function modeFileBody(mode) {
   return stateFileBody(mode, null, "calm", "theme", "pixels", mode)
 }
 
-function mergeState(raw, mode, weatherCode, speed, look, script, resumeMode) {
+function mergeState(raw, mode, weatherCode, speed, look, script, resumeMode, intensity) {
   var current = parseStateFile(raw)
   var nextMode = mode === undefined || mode === null || mode === "" ? current.mode : normalizeMode(mode)
   var nextCode = weatherCode != null && weatherCode !== "" && isFinite(Number(weatherCode))
@@ -432,15 +453,20 @@ function mergeState(raw, mode, weatherCode, speed, look, script, resumeMode) {
   var nextResume = resumeMode === undefined || resumeMode === null || resumeMode === ""
     ? current.resumeMode
     : normalizeMode(resumeMode)
+  var nextIntensity = intensity === undefined || intensity === null || intensity === ""
+    ? current.intensity
+    : normalizeIntensity(intensity)
   if (nextResume === "off") nextResume = "auto"
   if (nextMode !== "off") nextResume = nextMode
+  if (isManualIntensity(nextMode)) nextIntensity = nextMode
   return {
     mode: nextMode,
     weatherCode: nextCode,
     speed: nextSpeed,
     look: nextLook,
     script: nextScript,
-    resumeMode: nextResume
+    resumeMode: nextResume,
+    intensity: nextIntensity
   }
 }
 
@@ -493,6 +519,80 @@ function modeOptions() {
     { value: "torrential", label: "Torrential" },
     { value: "auto", label: "Auto" }
   ]
+}
+
+function intensityOptions() {
+  return [
+    { value: "light", label: "Light" },
+    { value: "steady", label: "Steady" },
+    { value: "heavy", label: "Heavy" },
+    { value: "torrential", label: "Torrential" }
+  ]
+}
+
+function isManualIntensity(mode) {
+  mode = normalizeMode(mode)
+  return mode === "light" || mode === "steady" || mode === "heavy" || mode === "torrential"
+}
+
+function normalizeIntensity(value) {
+  var intensity = String(value || "").replace(/^\s+|\s+$/g, "").toLowerCase()
+  if (intensity === "light" || intensity === "steady" || intensity === "heavy" || intensity === "torrential")
+    return intensity
+  return "steady"
+}
+
+function intensityIndex(value) {
+  var intensity = normalizeIntensity(value)
+  var options = intensityOptions()
+  for (var i = 0; i < options.length; i++) {
+    if (options[i].value === intensity) return i
+  }
+  return 1
+}
+
+function intensityFromIndex(index) {
+  var options = intensityOptions()
+  var i = Math.round(Number(index))
+  if (!isFinite(i)) i = 1
+  if (i < 0) i = 0
+  if (i > options.length - 1) i = options.length - 1
+  return options[i].value
+}
+
+function followWeatherActive(mode, resumeMode) {
+  mode = normalizeMode(mode)
+  if (mode === "auto") return true
+  if (mode === "off") return normalizeMode(resumeMode) === "auto"
+  return false
+}
+
+function applyFollowWeather(state, follow) {
+  var mode = normalizeMode(state && state.mode)
+  var intensity = normalizeIntensity(state && state.intensity)
+  if (isManualIntensity(mode)) intensity = mode
+  if (mode === "off") {
+    return {
+      mode: "off",
+      intensity: intensity,
+      resumeMode: follow ? "auto" : intensity
+    }
+  }
+  if (follow) return { mode: "auto", intensity: intensity, resumeMode: "auto" }
+  return { mode: intensity, intensity: intensity, resumeMode: intensity }
+}
+
+function applyIntensityChoice(state, next) {
+  var intensity = normalizeIntensity(next)
+  var mode = normalizeMode(state && state.mode)
+  if (mode === "off") return { mode: "off", intensity: intensity, resumeMode: intensity }
+  return { mode: intensity, intensity: intensity, resumeMode: intensity }
+}
+
+function panelSections(look) {
+  var sections = ["power", "weather", "intensity", "speed", "look"]
+  if (normalizeLook(look) === "matrix") sections.push("glyphs")
+  return sections
 }
 
 function forecastUrl(location) {
@@ -1078,6 +1178,7 @@ if (typeof module !== "undefined") {
     normalizeLook: normalizeLook,
     lookLabel: lookLabel,
     lookOptions: lookOptions,
+    lookSwatch: lookSwatch,
     paletteHex: paletteHex,
     pickPsychedelic: pickPsychedelic,
     normalizeScript: normalizeScript,
@@ -1105,6 +1206,15 @@ if (typeof module !== "undefined") {
     cycleMode: cycleMode,
     modeLabel: modeLabel,
     weatherHint: weatherHint,
-    modeOptions: modeOptions
+    modeOptions: modeOptions,
+    intensityOptions: intensityOptions,
+    isManualIntensity: isManualIntensity,
+    normalizeIntensity: normalizeIntensity,
+    intensityIndex: intensityIndex,
+    intensityFromIndex: intensityFromIndex,
+    followWeatherActive: followWeatherActive,
+    applyFollowWeather: applyFollowWeather,
+    applyIntensityChoice: applyIntensityChoice,
+    panelSections: panelSections
   }
 }

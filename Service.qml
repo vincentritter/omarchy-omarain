@@ -22,6 +22,7 @@ Item {
   property string look: "theme"
   property string script: "pixels"
   property string resumeMode: "auto"
+  property string intensity: "steady"
   readonly property bool useGlyphs: RainModel.usesGlyphs(look, script)
   property var weatherCode: null
   property var precipitation: null
@@ -65,6 +66,7 @@ Item {
       if (root.mode !== "off") root.resumeMode = root.mode
     } else {
       root.resumeMode = mode
+      if (RainModel.isManualIntensity(mode)) root.intensity = mode
     }
     if (mode === root.mode) {
       persistMode()
@@ -72,6 +74,60 @@ Item {
     }
     root.mode = mode
     root.bumpConfig()
+    persistMode()
+  }
+
+  function setFollowWeather(follow) {
+    var applied = RainModel.applyFollowWeather({
+      mode: root.mode,
+      intensity: root.intensity,
+      resumeMode: root.resumeMode
+    }, follow)
+    root.intensity = applied.intensity
+    root.resumeMode = applied.resumeMode
+    if (applied.mode === root.mode) {
+      persistMode()
+      return
+    }
+    root.mode = applied.mode
+    root.bumpConfig()
+    persistMode()
+  }
+
+  function setIntensity(next) {
+    var applied = RainModel.applyIntensityChoice({
+      mode: root.mode,
+      intensity: root.intensity,
+      resumeMode: root.resumeMode
+    }, next)
+    var dirty = applied.mode !== root.mode
+    root.mode = applied.mode
+    root.intensity = applied.intensity
+    root.resumeMode = applied.resumeMode
+    if (dirty) root.bumpConfig()
+    persistMode()
+  }
+
+  function syncFromPanel(merged) {
+    if (!merged) return
+    var mode = RainModel.normalizeMode(merged.mode)
+    var speed = RainModel.normalizeSpeed(merged.speed)
+    var look = RainModel.normalizeLook(merged.look)
+    var script = RainModel.normalizeScript(merged.script)
+    var resume = RainModel.normalizeMode(merged.resumeMode)
+    var intensity = RainModel.normalizeIntensity(merged.intensity)
+    if (resume === "off") resume = "auto"
+    if (mode !== "off") resume = mode
+    if (RainModel.isManualIntensity(mode)) intensity = mode
+    var dirty = mode !== root.mode || speed !== root.speed || look !== root.look || script !== root.script
+    root.mode = mode
+    root.speed = speed
+    root.look = look
+    root.script = script
+    root.resumeMode = resume
+    root.intensity = intensity
+    if (merged.weatherCode != null) root.weatherCode = merged.weatherCode
+    if (dirty) root.bumpConfig()
     persistMode()
   }
 
@@ -88,7 +144,8 @@ Item {
 
   function setLook(next) {
     var look = RainModel.normalizeLook(next)
-    var script = look === "matrix" ? "glyphs" : root.script
+    var script = root.script
+    if (look === "matrix" && root.look !== "matrix") script = "glyphs"
     var same = look === root.look && script === root.script
     root.look = look
     root.script = script
@@ -120,7 +177,7 @@ Item {
   function persistMode() {
     if (!root.modeLoaded) return
     if (!mkdirProc.running) mkdirProc.running = true
-    modeFile.setText(RainModel.stateFileBody(root.mode, root.weatherCode, root.speed, root.look, root.script, root.resumeMode))
+    modeFile.setText(RainModel.stateFileBody(root.mode, root.weatherCode, root.speed, root.look, root.script, root.resumeMode, root.intensity))
   }
 
   function applyWeather(raw) {
@@ -190,6 +247,7 @@ Item {
       root.look = next.look
       root.script = next.script
       root.resumeMode = next.resumeMode
+      root.intensity = next.intensity
       root.modeLoaded = true
       if (dirty) root.bumpConfig()
     }
