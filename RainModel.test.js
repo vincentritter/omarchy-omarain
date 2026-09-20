@@ -13,8 +13,8 @@ test("snapToGrid lands on the pixel grid", () => {
 })
 
 test("createState sizes a sparse drop field from the screen width", () => {
-  const small = RainModel.createState(800, 600, { seed: 1 })
-  const wide = RainModel.createState(1920, 1080, { seed: 1 })
+  const small = RainModel.createState(800, 600, { seed: 1, mode: "steady" })
+  const wide = RainModel.createState(1920, 1080, { seed: 1, mode: "steady" })
   assert.ok(small.dropTarget >= 2)
   assert.ok(wide.dropTarget > small.dropTarget)
   assert.ok(wide.dropTarget < 80)
@@ -22,7 +22,7 @@ test("createState sizes a sparse drop field from the screen width", () => {
 })
 
 test("createState fills the field with drops already in flight", () => {
-  const state = RainModel.createState(1280, 720, { seed: 7 })
+  const state = RainModel.createState(1280, 720, { seed: 7, mode: "steady" })
   const drops = ofKind(state, "drop")
   assert.equal(drops.length, state.dropTarget)
   drops.forEach(function (drop) {
@@ -36,7 +36,7 @@ test("createState fills the field with drops already in flight", () => {
 })
 
 test("a field mixes droplet sizes including specks smaller than the base pixel", () => {
-  const state = RainModel.createState(1920, 1080, { seed: 12, pixel: 4 })
+  const state = RainModel.createState(1920, 1080, { seed: 12, pixel: 4, mode: "steady" })
   const drops = ofKind(state, "drop")
   const widths = {}
   drops.forEach(function (drop) { widths[drop.w] = true })
@@ -45,7 +45,7 @@ test("a field mixes droplet sizes including specks smaller than the base pixel",
 })
 
 test("drops sit on far, mid, and near layers", () => {
-  const state = RainModel.createState(1920, 1080, { seed: 15, pixel: 4 })
+  const state = RainModel.createState(1920, 1080, { seed: 15, pixel: 4, mode: "steady" })
   const layers = {}
   ofKind(state, "drop").forEach(function (drop) { layers[drop.layer] = true })
   assert.equal(layers[0], true)
@@ -54,7 +54,7 @@ test("drops sit on far, mid, and near layers", () => {
 })
 
 test("near drops fall faster than far drops", () => {
-  const state = RainModel.createState(1920, 1080, { seed: 21, pixel: 4 })
+  const state = RainModel.createState(1920, 1080, { seed: 21, pixel: 4, mode: "steady" })
   const drops = ofKind(state, "drop")
   const far = drops.filter(function (drop) { return drop.layer === 0 })
   const near = drops.filter(function (drop) { return drop.layer === 2 })
@@ -74,7 +74,7 @@ test("a slice of drops use the accent role", () => {
 })
 
 test("step moves drops downward", () => {
-  const state = RainModel.createState(640, 480, { seed: 11 })
+  const state = RainModel.createState(640, 480, { seed: 11, mode: "steady" })
   const drop = ofKind(state, "drop")[0]
   drop.y = 12
   drop.vy = 120
@@ -185,7 +185,7 @@ test("a fallen drop is replaced so rain keeps falling", () => {
 })
 
 test("resize keeps the drop field matched to the new width", () => {
-  const state = RainModel.createState(800, 600, { seed: 9 })
+  const state = RainModel.createState(800, 600, { seed: 9, mode: "steady" })
   RainModel.resize(state, 1920, 1080)
   assert.equal(state.width, 1920)
   assert.equal(state.height, 1080)
@@ -208,30 +208,37 @@ test("fixed modes keep a constant intensity", () => {
   assert.ok(RainModel.resolveIntensity("torrential") > RainModel.resolveIntensity("heavy") * 2)
 })
 
-test("clear weather tints auto quieter than a storm, never off", () => {
-  const clear = RainModel.resolveIntensity("auto", 0, 0)
+test("clear and overcast auto stay dry", () => {
+  assert.equal(RainModel.resolveIntensity("auto", 0, 0), 0)
+  assert.equal(RainModel.resolveIntensity("auto", 1, 0), 0)
+  assert.equal(RainModel.resolveIntensity("auto", 2, 0), 0)
+  assert.equal(RainModel.resolveIntensity("auto", 3, 0), 0)
+  assert.equal(RainModel.resolveIntensity("auto", 45, 0), 0)
+})
+
+test("auto rains for drizzle and storms, with drizzle quieter than Light", () => {
+  const drizzle = RainModel.resolveIntensity("auto", 51, 0)
   const storm = RainModel.resolveIntensity("auto", 95, 0)
-  assert.ok(clear > 0)
-  assert.ok(clear < 0.3)
-  assert.ok(storm > clear)
+  const showers = RainModel.resolveIntensity("auto", 80, 0)
+  assert.ok(drizzle > 0)
+  assert.ok(drizzle < RainModel.resolveIntensity("light"))
+  assert.ok(showers > drizzle)
+  assert.ok(storm > showers)
   assert.ok(storm > 1)
 })
 
-test("overcast auto is a few specks, not a curtain", () => {
-  const overcast = RainModel.resolveIntensity("auto", 3, 0)
-  const showers = RainModel.resolveIntensity("auto", 80, 0)
-  assert.ok(overcast < RainModel.resolveIntensity("light"))
-  assert.ok(overcast < 0.3)
-  assert.ok(showers > overcast)
+test("auto with unknown weather stays dry", () => {
+  assert.equal(RainModel.resolveIntensity("auto", null, 0), 0)
 })
 
-test("auto with unknown weather stays a quiet living field", () => {
-  assert.ok(RainModel.resolveIntensity("auto", null, 0) < RainModel.resolveIntensity("steady"))
+test("zero precipitation keeps auto dry even if the weather code says drizzle", () => {
+  assert.equal(RainModel.resolveIntensity("auto", 51, 0, 0), 0)
+  assert.ok(RainModel.resolveIntensity("auto", 51, 0, 0.3) > 0)
 })
 
 test("auto wander breathes intensity over time", () => {
-  const a = RainModel.resolveIntensity("auto", null, 0)
-  const b = RainModel.resolveIntensity("auto", null, 18)
+  const a = RainModel.resolveIntensity("auto", 61, 0)
+  const b = RainModel.resolveIntensity("auto", 61, 18)
   assert.notEqual(Math.round(a * 100), Math.round(b * 100))
 })
 
@@ -243,6 +250,16 @@ test("heavier intensity packs more drops onto the same width", () => {
   assert.ok(light > 0)
   assert.ok(light < steady)
   assert.ok(steady < heavy)
+})
+
+test("auto overcast drains the field instead of keeping specks", () => {
+  const state = RainModel.createState(800, 600, { seed: 1, mode: "auto", weatherCode: 80 })
+  assert.ok(ofKind(state, "drop").length > 0)
+  RainModel.configure(state, { weatherCode: 3, precipitation: 0 })
+  assert.equal(state.dropTarget, 0)
+  assert.equal(state.dropTargetGoal, 0)
+  for (var i = 0; i < 400; i++) RainModel.step(state, 0.05)
+  assert.equal(ofKind(state, "drop").length, 0)
 })
 
 test("off stops spawning but lets falling drops finish", () => {
@@ -334,6 +351,56 @@ test("Open-Meteo and wttr payloads yield a weather code", () => {
     current_condition: [{ weatherCode: "266" }]
   })), 51)
   assert.equal(RainModel.weatherCodeFromPayload(""), null)
+})
+
+test("Open-Meteo and wttr payloads yield precipitation", () => {
+  assert.equal(RainModel.precipitationFromPayload(JSON.stringify({
+    current: { weather_code: 3, precipitation: 0 }
+  })), 0)
+  assert.equal(RainModel.precipitationFromPayload(JSON.stringify({
+    current: { weather_code: 61, precipitation: 1.2 }
+  })), 1.2)
+  assert.equal(RainModel.precipitationFromPayload(JSON.stringify({
+    current_condition: [{ weatherCode: "266", precipMM: "0.3" }]
+  })), 0.3)
+  assert.equal(RainModel.precipitationFromPayload(""), null)
+})
+
+test("a wttr payload yields coordinates so auto can follow up with Open-Meteo", () => {
+  const loc = RainModel.locationFromWttrPayload(JSON.stringify({
+    nearest_area: [{ areaName: [{ value: "Polesie" }], latitude: "52.017", longitude: "20.017" }],
+    current_condition: [{ weatherCode: "266" }]
+  }))
+  assert.equal(loc.name, "Polesie")
+  assert.equal(loc.latitude, 52.017)
+  assert.equal(loc.longitude, 20.017)
+  const url = RainModel.forecastUrl(loc)
+  assert.ok(url.indexOf("api.open-meteo.com") !== -1)
+  assert.ok(url.indexOf("52.017") !== -1)
+  assert.equal(RainModel.locationFromWttrPayload(JSON.stringify({
+    current: { weather_code: 3 }
+  })), null)
+})
+
+test("locate payloads yield coordinates without treating a forecast as a place", () => {
+  const geo = RainModel.locationFromLocatePayload(JSON.stringify({
+    city: "Rzeszow",
+    latitude: "50.0398",
+    longitude: "22.0065"
+  }))
+  assert.equal(geo.name, "Rzeszow")
+  assert.equal(geo.latitude, 50.0398)
+  assert.equal(geo.longitude, 22.0065)
+  const geocoded = RainModel.locationFromLocatePayload(JSON.stringify({
+    results: [{ name: "Krakow", latitude: 50.06143, longitude: 19.93658 }]
+  }))
+  assert.equal(geocoded.name, "Krakow")
+  assert.equal(geocoded.latitude, 50.06143)
+  assert.equal(RainModel.locationFromLocatePayload(JSON.stringify({
+    latitude: 50.06,
+    longitude: 19.94,
+    current: { weather_code: 3, precipitation: 0 }
+  })), null)
 })
 
 test("weather location file yields coordinates when present", () => {
@@ -541,6 +608,14 @@ test("forecast URL prefers Open-Meteo when coordinates exist", () => {
   assert.ok(coords.indexOf("api.open-meteo.com") !== -1)
   assert.ok(coords.indexOf("50.06") !== -1)
   assert.ok(coords.indexOf("wind_speed_10m") !== -1)
-  assert.equal(RainModel.forecastUrl({ name: "Krakow" }), "https://wttr.in/Krakow?format=j1")
-  assert.equal(RainModel.forecastUrl({}), "https://wttr.in/?format=j1")
+  assert.ok(coords.indexOf("precipitation") !== -1)
+  assert.equal(RainModel.forecastUrl({ name: "Krakow" }), "")
+  assert.equal(RainModel.forecastUrl({}), "")
+})
+
+test("locate URL geocodes a name and otherwise uses IP geo", () => {
+  const named = RainModel.locateUrl({ name: "Krakow" })
+  assert.ok(named.indexOf("geocoding-api.open-meteo.com") !== -1)
+  assert.ok(named.indexOf("Krakow") !== -1)
+  assert.equal(RainModel.locateUrl({}), "https://get.geojs.io/v1/ip/geo.json")
 })

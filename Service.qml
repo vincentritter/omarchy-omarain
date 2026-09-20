@@ -24,11 +24,17 @@ Item {
   property string resumeMode: "auto"
   readonly property bool useGlyphs: RainModel.usesGlyphs(look, script)
   property var weatherCode: null
+  property var precipitation: null
   property real windX: 0
   property real tiltX: 0
   property var location: ({ name: "", latitude: null, longitude: null })
   property bool modeLoaded: false
   property bool pendingWeatherRefresh: false
+  readonly property bool raining: {
+    if (root.mode === "off") return false
+    if (root.mode !== "auto") return true
+    return RainModel.resolveIntensity("auto", root.weatherCode, 0, root.precipitation) > 0
+  }
   property int tiltMisses: 0
   property int configTick: 0
 
@@ -118,11 +124,26 @@ Item {
   }
 
   function applyWeather(raw) {
+    var detected = RainModel.locationFromLocatePayload(raw)
+    if (detected && (root.location.latitude == null || root.location.longitude == null)) {
+      root.location = {
+        name: root.location.name || detected.name,
+        latitude: detected.latitude,
+        longitude: detected.longitude
+      }
+      root.refreshWeather()
+      return
+    }
     var code = RainModel.weatherCodeFromPayload(raw)
+    var precip = RainModel.precipitationFromPayload(raw)
     var windX = RainModel.windXFromPayload(raw)
     var dirty = false
     if (code !== root.weatherCode) {
       root.weatherCode = code
+      dirty = true
+    }
+    if (precip !== root.precipitation) {
+      root.precipitation = precip
       dirty = true
     }
     if (windX !== root.windX) {
@@ -139,7 +160,9 @@ Item {
       root.pendingWeatherRefresh = true
       return
     }
-    forecastProc.command = ["curl", "-fsS", "--max-time", "8", RainModel.forecastUrl(root.location)]
+    var url = RainModel.forecastUrl(root.location) || RainModel.locateUrl(root.location)
+    if (!url) return
+    forecastProc.command = ["curl", "-fsS", "--max-time", "8", url]
     forecastProc.running = true
   }
 
@@ -295,6 +318,7 @@ Item {
         RainModel.configure(sim, {
           mode: root.mode,
           weatherCode: root.weatherCode,
+          precipitation: root.precipitation,
           windX: root.windX,
           speed: root.speed,
           look: root.look,
@@ -310,6 +334,7 @@ Item {
             seed: root.seedFor(modelData),
             mode: root.mode,
             weatherCode: root.weatherCode,
+            precipitation: root.precipitation,
             windX: root.windX,
             speed: root.speed,
             look: root.look,
@@ -336,7 +361,7 @@ Item {
       }
 
       FrameAnimation {
-        running: panel.sim !== null && panel.visible && (root.mode !== "off" || panel.draining)
+        running: panel.sim !== null && panel.visible && (root.raining || panel.draining)
         onTriggered: {
           var dt = frameTime
           if (!(dt > 0) || dt > 0.05) dt = 1 / 60

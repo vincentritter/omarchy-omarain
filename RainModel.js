@@ -158,33 +158,32 @@ function normalizeMode(value) {
 
 function weatherTint(code) {
   var c = parseInt(String(code), 10)
-  if (!isFinite(c)) return 0.28
+  if (!isFinite(c)) return 0
   if (c >= 95) return 2.4
   if (c >= 82) return 1.9
   if (c >= 80) return 1.15
   if (c >= 71) return 0.7
   if (c >= 65) return 1.8
   if (c >= 61) return 1.1
-  if (c >= 51) return 0.5
-  if (c >= 45) return 0.26
-  if (c >= 3) return 0.18
-  if (c >= 2) return 0.16
-  if (c >= 1) return 0.12
-  return 0.1
+  if (c >= 51) return 0.28
+  return 0
 }
 
 function wanderAt(elapsed) {
   return 1 + 0.1 * Math.sin((Number(elapsed) || 0) * 2 * Math.PI / 72)
 }
 
-function resolveIntensity(mode, weatherCode, elapsed) {
+function resolveIntensity(mode, weatherCode, elapsed, precipitation) {
   mode = normalizeMode(mode)
   if (mode === "off") return 0
   if (mode === "light") return 0.45
   if (mode === "heavy") return 3.4
   if (mode === "torrential") return 8
   if (mode === "steady") return 1
-  return clamp(weatherTint(weatherCode) * wanderAt(elapsed), 0.08, 3.2)
+  var tint = weatherTint(weatherCode)
+  if (precipitation != null && precipitation !== "" && isFinite(Number(precipitation)) && Number(precipitation) <= 0)
+    tint = 0
+  return clamp(tint * wanderAt(elapsed), 0, 3.2)
 }
 
 function dropTargetFor(width, intensity) {
@@ -286,6 +285,70 @@ function weatherCodeFromPayload(raw) {
     var current = data && data.current_condition && data.current_condition[0]
     if (current && current.weatherCode != null) return wttrToWmo(current.weatherCode)
     return null
+  } catch (e) {
+    return null
+  }
+}
+
+function precipitationFromPayload(raw) {
+  var text = String(raw || "").replace(/^\s+|\s+$/g, "")
+  if (!text) return null
+  try {
+    var data = JSON.parse(text)
+    if (data && data.current && data.current.precipitation != null) {
+      var mm = Number(data.current.precipitation)
+      return isFinite(mm) ? mm : null
+    }
+    var current = data && data.current_condition && data.current_condition[0]
+    if (current && current.precipMM != null) {
+      var wttr = Number(current.precipMM)
+      return isFinite(wttr) ? wttr : null
+    }
+    return null
+  } catch (e) {
+    return null
+  }
+}
+
+function coordsFrom(latitude, longitude, name) {
+  var lat = parseFloat(latitude)
+  var lon = parseFloat(longitude)
+  if (isNaN(lat) || isNaN(lon)) return null
+  return {
+    name: typeof name === "string" ? name.replace(/^\s+|\s+$/g, "") : "",
+    latitude: lat,
+    longitude: lon
+  }
+}
+
+function locationFromWttrPayload(raw) {
+  var text = String(raw || "").replace(/^\s+|\s+$/g, "")
+  if (!text) return null
+  try {
+    var data = JSON.parse(text)
+    var area = data && data.nearest_area && data.nearest_area[0]
+    if (!area) return null
+    var name = ""
+    if (area.areaName && area.areaName[0] && area.areaName[0].value)
+      name = String(area.areaName[0].value)
+    return coordsFrom(area.latitude, area.longitude, name)
+  } catch (e) {
+    return null
+  }
+}
+
+function locationFromLocatePayload(raw) {
+  var text = String(raw || "").replace(/^\s+|\s+$/g, "")
+  if (!text) return null
+  try {
+    var data = JSON.parse(text)
+    if (!data || typeof data !== "object") return null
+    if (data.current && data.current.weather_code != null) return null
+    var result = data.results && data.results[0]
+    if (result) return coordsFrom(result.latitude, result.longitude, result.name)
+    var wttr = locationFromWttrPayload(text)
+    if (wttr) return wttr
+    return coordsFrom(data.latitude, data.longitude, data.city || data.name)
   } catch (e) {
     return null
   }
@@ -435,17 +498,20 @@ function modeOptions() {
 function forecastUrl(location) {
   var lat = location && location.latitude
   var lon = location && location.longitude
-  if (lat != null && lon != null && isFinite(Number(lat)) && isFinite(Number(lon))) {
-    return "https://api.open-meteo.com/v1/forecast"
-      + "?latitude=" + encodeURIComponent(String(lat))
-      + "&longitude=" + encodeURIComponent(String(lon))
-      + "&current=weather_code,wind_speed_10m,wind_direction_10m"
-      + "&forecast_days=1"
-      + "&timezone=auto"
-  }
-  var name = location && location.name ? String(location.name) : ""
-  if (name) return "https://wttr.in/" + encodeURIComponent(name) + "?format=j1"
-  return "https://wttr.in/?format=j1"
+  if (lat == null || lon == null || !isFinite(Number(lat)) || !isFinite(Number(lon))) return ""
+  return "https://api.open-meteo.com/v1/forecast"
+    + "?latitude=" + encodeURIComponent(String(lat))
+    + "&longitude=" + encodeURIComponent(String(lon))
+    + "&current=weather_code,wind_speed_10m,wind_direction_10m,precipitation"
+    + "&forecast_days=1"
+    + "&timezone=auto"
+}
+
+function locateUrl(location) {
+  var name = location && location.name ? String(location.name).replace(/^\s+|\s+$/g, "") : ""
+  if (name)
+    return "https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(name) + "&count=1&language=en&format=json"
+  return "https://get.geojs.io/v1/ip/geo.json"
 }
 
 function blankCell() {
@@ -808,7 +874,7 @@ function easeDropTarget(state, dt) {
 }
 
 function syncIntensity(state, immediate) {
-  applyIntensity(state, resolveIntensity(state.mode, state.weatherCode, state.elapsed), immediate)
+  applyIntensity(state, resolveIntensity(state.mode, state.weatherCode, state.elapsed, state.precipitation), immediate)
 }
 
 function setMode(state, mode) {
@@ -844,6 +910,10 @@ function configure(state, options) {
   if (options.speed !== undefined) setSpeed(state, options.speed)
   if (options.look !== undefined) state.look = normalizeLook(options.look)
   if (options.script !== undefined) state.script = normalizeScript(options.script)
+  if (options.precipitation !== undefined) {
+    var precip = options.precipitation == null || options.precipitation === "" ? null : Number(options.precipitation)
+    state.precipitation = isFinite(precip) ? precip : null
+  }
   syncIntensity(state)
 }
 
@@ -858,6 +928,7 @@ function createState(width, height, options) {
     pixel: pixel,
     mode: mode,
     weatherCode: options.weatherCode == null ? null : Number(options.weatherCode),
+    precipitation: options.precipitation == null || options.precipitation === "" ? null : Number(options.precipitation),
     windX: options.windX == null ? 0 : Number(options.windX),
     tiltX: options.tiltX == null ? 0 : Number(options.tiltX),
     speed: normalizeSpeed(options.speed || "calm"),
@@ -872,6 +943,7 @@ function createState(width, height, options) {
     rng: options.rng || mulberry32(seed)
   }
   if (!isFinite(state.weatherCode)) state.weatherCode = null
+  if (!isFinite(state.precipitation)) state.precipitation = null
   if (!isFinite(state.windX)) state.windX = 0
   if (!isFinite(state.tiltX)) state.tiltX = 0
   syncIntensity(state, true)
@@ -907,7 +979,7 @@ function wrapDropX(state, cell) {
 function step(state, dt) {
   state.elapsed += dt
   if (state.mode === "auto") {
-    var next = resolveIntensity("auto", state.weatherCode, state.elapsed)
+    var next = resolveIntensity("auto", state.weatherCode, state.elapsed, state.precipitation)
     var goal = dropTargetFor(state.width, next)
     if (goal !== state.dropTargetGoal || Math.abs(next - state.intensity) > 0.03)
       applyIntensity(state, next)
@@ -1014,6 +1086,9 @@ if (typeof module !== "undefined") {
     pickGlyph: pickGlyph,
     configure: configure,
     weatherCodeFromPayload: weatherCodeFromPayload,
+    precipitationFromPayload: precipitationFromPayload,
+    locationFromWttrPayload: locationFromWttrPayload,
+    locationFromLocatePayload: locationFromLocatePayload,
     windXFromPayload: windXFromPayload,
     parseAccelLine: parseAccelLine,
     tiltXFromAccel: tiltXFromAccel,
@@ -1026,6 +1101,7 @@ if (typeof module !== "undefined") {
     stateFileBody: stateFileBody,
     modeFileBody: modeFileBody,
     forecastUrl: forecastUrl,
+    locateUrl: locateUrl,
     cycleMode: cycleMode,
     modeLabel: modeLabel,
     weatherHint: weatherHint,

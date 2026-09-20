@@ -6,7 +6,7 @@ It sits on Hyprland’s bottom layer, so windows and the bar stay above it. The 
 
 If the machine exposes an accelerometer (IIO or Apple SMC `position`), tilting the chassis leans the rain.
 
-The bar widget sets intensity (Off, Light, Steady, Heavy, Torrential, Auto), fall speed (Calm, Natural, Hyper-gravity), and look (Theme, Psychedelic, Matrix, Amber). Psychedelic is a mixed neon field. Auto keeps a living rain that wanders a little, then turns the volume up or down from the same location the weather widget uses. Right-click the icon to turn rain off and on, restoring the last intensity. Left-click opens the panel.
+The bar widget sets intensity (Off, Light, Steady, Heavy, Torrential, Auto), fall speed (Calm, Natural, Hyper-gravity), and look (Theme, Psychedelic, Matrix, Amber). Psychedelic is a mixed neon field. Auto stays dry unless the forecast is actually precipitating, then turns the volume up or down from Open-Meteo, using the same location the weather widget uses. Right-click the icon to turn rain off and on, restoring the last intensity. Left-click opens the panel.
 
 ## Install
 
