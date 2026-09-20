@@ -38,6 +38,13 @@ function speedScale(speed) {
   return 1
 }
 
+function previewFallScale(speed) {
+  speed = normalizeSpeed(speed)
+  if (speed === "natural") return 2.2
+  if (speed === "hyper") return 5.5
+  return 1
+}
+
 function speedLabel(speed) {
   speed = normalizeSpeed(speed)
   if (speed === "natural") return "Natural"
@@ -152,6 +159,27 @@ function lookSwatch(look) {
   look = normalizeLook(look)
   if (look === "theme") return ""
   return paletteHex(look, "accent")
+}
+
+function lookSwatches(look) {
+  look = normalizeLook(look)
+  if (look === "candy") return candySwatches().slice(0, 6)
+  var hex = lookSwatch(look)
+  return hex ? [hex] : []
+}
+
+function lookPreviewColors(look) {
+  look = normalizeLook(look)
+  if (look === "theme") return []
+  if (look === "candy") return candySwatches()
+  var muted = paletteHex(look, "muted")
+  var foreground = paletteHex(look, "foreground")
+  var accent = paletteHex(look, "accent")
+  var out = []
+  if (muted) out.push(muted)
+  if (foreground) out.push(foreground)
+  if (accent) out.push(accent)
+  return out
 }
 
 function normalizeMode(value) {
@@ -1172,12 +1200,15 @@ if (typeof module !== "undefined") {
     setWeatherCode: setWeatherCode,
     normalizeSpeed: normalizeSpeed,
     speedScale: speedScale,
+    previewFallScale: previewFallScale,
     speedLabel: speedLabel,
     speedOptions: speedOptions,
     normalizeLook: normalizeLook,
     lookLabel: lookLabel,
     lookOptions: lookOptions,
     lookSwatch: lookSwatch,
+    lookSwatches: lookSwatches,
+    lookPreviewColors: lookPreviewColors,
     paletteHex: paletteHex,
     pickCandy: pickCandy,
     normalizeScript: normalizeScript,

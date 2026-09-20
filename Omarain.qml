@@ -501,27 +501,45 @@ Panel {
 
               Repeater {
                 model: root.speeds
-                Button {
+                Item {
                   required property var modelData
                   required property int index
                   width: speedRow.cellWidth
-                  text: modelData.label
-                  tooltipText: modelData.tooltip || ""
-                  fontSize: Style.font.bodySmall
-                  foreground: root.foreground
-                  fontFamily: root.fontFamily
-                  horizontalPadding: Style.spacing.controlPaddingX
-                  verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-                  bordered: true
-                  active: root.speed === modelData.value
-                  hasCursor: root.cursorActive && root.focusSection === "speed" && root.speedIndex === index
-                  onClicked: root.setSpeed(modelData.value)
-                  onHovered: function(h) {
-                    if (h) {
-                      root.cursorActive = true
-                      root.focusSection = "speed"
-                      root.speedIndex = index
+                  implicitHeight: speedChip.implicitHeight
+                  height: speedChip.implicitHeight
+
+                  Button {
+                    id: speedChip
+                    width: parent.width
+                    text: modelData.label
+                    tooltipText: modelData.tooltip || ""
+                    fontSize: Style.font.bodySmall
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    horizontalPadding: Style.spacing.controlPaddingX
+                    verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
+                    bordered: true
+                    active: root.speed === modelData.value
+                    hasCursor: root.cursorActive && root.focusSection === "speed" && root.speedIndex === index
+                    onClicked: root.setSpeed(modelData.value)
+                    onHovered: function(h) {
+                      if (h) {
+                        root.cursorActive = true
+                        root.focusSection = "speed"
+                        root.speedIndex = index
+                      }
                     }
+                  }
+
+                  LookRain {
+                    anchors.fill: speedChip
+                    anchors.margins: 2
+                    look: root.look
+                    speed: modelData.value
+                    running: speedChip.hasCursor
+                    foreground: root.foreground
+                    accent: Color.accent
+                    z: 1
                   }
                 }
               }
@@ -577,7 +595,19 @@ Panel {
                     }
                   }
 
-                  Rectangle {
+                  LookRain {
+                    anchors.fill: lookChip
+                    anchors.margins: 2
+                    look: modelData.value
+                    speed: root.speed
+                    running: lookChip.hasCursor
+                    foreground: root.foreground
+                    accent: Color.accent
+                    z: 1
+                  }
+
+                  Row {
+                    id: lookStripe
                     anchors.left: lookChip.left
                     anchors.right: lookChip.right
                     anchors.bottom: lookChip.bottom
@@ -585,13 +615,26 @@ Panel {
                     anchors.rightMargin: Style.space(8)
                     anchors.bottomMargin: Style.space(5)
                     height: 2
-                    radius: 1
                     enabled: false
-                    color: {
-                      var hex = RainModel.lookSwatch(modelData.value)
-                      return hex !== "" ? hex : root.foreground
-                    }
+                    spacing: 0
+                    z: 2
                     opacity: root.look === modelData.value ? 1 : 0.55
+
+                    readonly property var colors: {
+                      var stripe = RainModel.lookSwatches(modelData.value)
+                      return stripe.length ? stripe : [root.foreground]
+                    }
+
+                    Repeater {
+                      model: lookStripe.colors.length
+                      Rectangle {
+                        required property int index
+                        width: Math.max(1, Math.floor(lookStripe.width / lookStripe.colors.length))
+                        height: lookStripe.height
+                        enabled: false
+                        color: lookStripe.colors[index]
+                      }
+                    }
                   }
                 }
               }

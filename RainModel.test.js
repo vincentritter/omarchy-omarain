@@ -550,6 +550,29 @@ test("look swatch uses the palette accent", () => {
   assert.equal(RainModel.lookSwatch("matrix"), RainModel.paletteHex("matrix", "accent"))
 })
 
+test("look preview colors feed chip hover rain", () => {
+  assert.deepEqual(RainModel.lookPreviewColors("theme"), [])
+  const candy = RainModel.lookPreviewColors("candy")
+  assert.ok(candy.length >= 4)
+  assert.equal(candy[0].charAt(0), "#")
+  const amber = RainModel.lookPreviewColors("amber")
+  assert.equal(amber.length, 3)
+  assert.equal(amber[2], RainModel.paletteHex("amber", "accent"))
+  assert.equal(RainModel.lookPreviewColors("matrix")[0], RainModel.paletteHex("matrix", "muted"))
+})
+
+test("candy look swatch is a stripe of palette colors", () => {
+  const stripe = RainModel.lookSwatches("candy")
+  assert.ok(stripe.length >= 4)
+  stripe.forEach(function (hex) {
+    assert.equal(hex.charAt(0), "#")
+    assert.equal(hex.length, 7)
+  })
+  assert.notEqual(stripe[0], stripe[1])
+  assert.deepEqual(RainModel.lookSwatches("amber"), [RainModel.lookSwatch("amber")])
+  assert.deepEqual(RainModel.lookSwatches("theme"), [])
+})
+
 test("matrix look keeps glyphs on the extra panel section", () => {
   assert.deepEqual(RainModel.panelSections("theme"), ["power", "weather", "intensity", "speed", "look"])
   assert.deepEqual(RainModel.panelSections("matrix"), ["power", "weather", "intensity", "speed", "look", "glyphs"])
@@ -667,6 +690,13 @@ test("natural and hyper fall faster than calm", () => {
   assert.equal(RainModel.speedScale("calm"), 1)
   assert.ok(RainModel.speedScale("natural") > 1)
   assert.ok(RainModel.speedScale("hyper") > RainModel.speedScale("natural"))
+})
+
+test("chip hover rain uses a readable speed scale", () => {
+  assert.equal(RainModel.previewFallScale("calm"), 1)
+  assert.ok(RainModel.previewFallScale("natural") > RainModel.previewFallScale("calm"))
+  assert.ok(RainModel.previewFallScale("hyper") > RainModel.previewFallScale("natural"))
+  assert.ok(RainModel.previewFallScale("hyper") < RainModel.speedScale("hyper"))
 })
 
 test("changing speed does not affect drops already falling", () => {
