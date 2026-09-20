@@ -24,6 +24,12 @@ omarchy plugin add https://github.com/vincentritter/omarchy-omarain.git --enable
 
 That lands in `~/.config/omarchy/plugins/vincentritter.omarain`. Omarain complements [Tinytray](https://github.com/vincentritter/omarchy-tinytray): rain on the wallpaper, widgets in the drawer. Host it there, or leave it on the right of the bar.
 
+## Update
+
+```bash
+omarchy plugin update vincentritter.omarain --yes
+```
+
 ## Remove
 
 ```bash
@@ -40,6 +46,6 @@ From the checkout:
 node --test RainModel.test.js
 ```
 
-Omarain is [MIT](LICENSE) licensed. It needs Omarchy.
+Omarain is [MIT](LICENSE) licensed. It needs Omarchy. State, weather, and tilt use Python 3.
 
 Built by [Vincent Ritter](https://vincentritter.com?ts=omarain).
