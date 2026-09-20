@@ -55,8 +55,7 @@ function speedOptions() {
 
 function normalizeLook(value) {
   var look = String(value || "").replace(/^\s+|\s+$/g, "").toLowerCase()
-  if (look === "psychedelic" || look === "screensaver" || look === "tte" || look === "rain")
-    return "psychedelic"
+  if (look === "candy") return "candy"
   if (look === "matrix") return "matrix"
   if (look === "amber" || look === "crt") return "amber"
   if (look === "theme") return "theme"
@@ -65,7 +64,7 @@ function normalizeLook(value) {
 
 function lookLabel(look) {
   look = normalizeLook(look)
-  if (look === "psychedelic") return "Psychedelic"
+  if (look === "candy") return "Candy"
   if (look === "matrix") return "Matrix"
   if (look === "amber") return "Amber"
   return "Theme"
@@ -74,7 +73,7 @@ function lookLabel(look) {
 function lookOptions() {
   return [
     { value: "theme", label: "Theme" },
-    { value: "psychedelic", label: "Psychedelic" },
+    { value: "candy", label: "Candy" },
     { value: "matrix", label: "Matrix" },
     { value: "amber", label: "Amber" }
   ]
@@ -120,7 +119,7 @@ function pushGlyph(cell, rng) {
     cell.trailGlyphs = cell.trailGlyphs.substring(cell.trailGlyphs.length - cap)
 }
 
-function psychedelicSwatches() {
+function candySwatches() {
   return [
     "#FF2BD6", "#00F0FF", "#FFE600", "#7CFF00", "#FF6B00",
     "#B14FFF", "#FF3B7C", "#00FFC2", "#4D7CFF", "#FF004D",
@@ -128,8 +127,8 @@ function psychedelicSwatches() {
   ]
 }
 
-function pickPsychedelic(rng) {
-  var swatches = psychedelicSwatches()
+function pickCandy(rng) {
+  var swatches = candySwatches()
   var roll = rng ? rng() : Math.random()
   return swatches[Math.floor(roll * swatches.length)] || swatches[0]
 }
@@ -138,7 +137,7 @@ function paletteHex(look, role) {
   look = normalizeLook(look)
   if (look === "theme") return ""
   var palettes = {
-    psychedelic: { muted: "#FF2BD6", foreground: "#00F0FF", accent: "#FFE600" },
+    candy: { muted: "#FF2BD6", foreground: "#00F0FF", accent: "#FFE600" },
     matrix: { muted: "#185318", foreground: "#92be92", accent: "#dbffdb" },
     amber: { muted: "#E08A00", foreground: "#FFC94A", accent: "#FFE7A0" }
   }
@@ -757,7 +756,7 @@ function paintDrop(cell, state, spec) {
   cell.trailGlyphs = cell.glyph
   cell.glyphStage = 0
   cell.collapseAcc = 0
-  cell.tint = spec.tint || pickPsychedelic(state.rng)
+  cell.tint = spec.tint || pickCandy(state.rng)
   cell.life = 1
   cell.maxLife = 1
 }
@@ -1180,7 +1179,7 @@ if (typeof module !== "undefined") {
     lookOptions: lookOptions,
     lookSwatch: lookSwatch,
     paletteHex: paletteHex,
-    pickPsychedelic: pickPsychedelic,
+    pickCandy: pickCandy,
     normalizeScript: normalizeScript,
     cycleScript: cycleScript,
     usesGlyphs: usesGlyphs,

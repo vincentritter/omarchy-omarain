@@ -48,7 +48,7 @@ Item {
 
   function fillFor(role, alpha, tint, look) {
     var useLook = look || root.look
-    if (useLook === "psychedelic" && tint)
+    if (useLook === "candy" && tint)
       return Util.alpha(tint, alpha)
     var hex = RainModel.paletteHex(useLook, role)
     if (hex) return Util.alpha(hex, alpha)

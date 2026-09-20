@@ -623,23 +623,29 @@ test("a glyph trail collapses into the floor before splashing", () => {
 
 test("unknown looks fall back to theme", () => {
   assert.equal(RainModel.normalizeLook("theme"), "theme")
-  assert.equal(RainModel.normalizeLook("psychedelic"), "psychedelic")
-  assert.equal(RainModel.normalizeLook("screensaver"), "psychedelic")
+  assert.equal(RainModel.normalizeLook("candy"), "candy")
   assert.equal(RainModel.normalizeLook("matrix"), "matrix")
   assert.equal(RainModel.normalizeLook("amber"), "amber")
+  assert.equal(RainModel.normalizeLook("psychedelic"), "theme")
   assert.equal(RainModel.normalizeLook("nope"), "theme")
 })
 
-test("psychedelic and matrix palettes use their own hex, theme does not", () => {
+test("candy look is labeled Candy", () => {
+  assert.equal(RainModel.lookLabel("candy"), "Candy")
+  assert.equal(RainModel.lookOptions()[1].value, "candy")
+  assert.equal(RainModel.lookOptions()[1].label, "Candy")
+})
+
+test("candy and matrix palettes use their own hex, theme does not", () => {
   assert.equal(RainModel.paletteHex("theme", "accent"), "")
-  const rain = RainModel.paletteHex("psychedelic", "foreground")
+  const rain = RainModel.paletteHex("candy", "foreground")
   assert.equal(rain.charAt(0), "#")
   assert.equal(rain.length, 7)
   assert.notEqual(RainModel.paletteHex("matrix", "accent"), rain)
   assert.notEqual(RainModel.paletteHex("amber", "foreground"), RainModel.paletteHex("matrix", "foreground"))
 })
 
-test("psychedelic drops pick different tints", () => {
+test("candy drops pick different tints", () => {
   const state = RainModel.createState(1920, 1080, { seed: 9, pixel: 4, mode: "steady" })
   const tints = {}
   ofKind(state, "drop").forEach(function (drop) {
