@@ -578,6 +578,11 @@ test("matrix look keeps glyphs on the extra panel section", () => {
   assert.deepEqual(RainModel.panelSections("matrix"), ["power", "weather", "intensity", "speed", "look", "glyphs"])
 })
 
+test("follow weather hides the intensity slider section", () => {
+  assert.deepEqual(RainModel.panelSections("theme", true), ["power", "weather", "speed", "look"])
+  assert.deepEqual(RainModel.panelSections("matrix", true), ["power", "weather", "speed", "look", "glyphs"])
+})
+
 test("matrix script cycles between pixels and glyphs", () => {
   assert.equal(RainModel.normalizeScript("glyphs"), "glyphs")
   assert.equal(RainModel.normalizeScript("text"), "glyphs")

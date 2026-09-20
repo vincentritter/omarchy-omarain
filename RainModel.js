@@ -616,8 +616,10 @@ function applyIntensityChoice(state, next) {
   return { mode: intensity, intensity: intensity, resumeMode: intensity }
 }
 
-function panelSections(look) {
-  var sections = ["power", "weather", "intensity", "speed", "look"]
+function panelSections(look, followWeather) {
+  var sections = ["power", "weather"]
+  if (!followWeather) sections.push("intensity")
+  sections.push("speed", "look")
   if (normalizeLook(look) === "matrix") sections.push("glyphs")
   return sections
 }

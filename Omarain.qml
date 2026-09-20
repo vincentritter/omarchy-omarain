@@ -16,10 +16,10 @@ Panel {
   readonly property string modePath: home + "/.local/state/omarchy/omarain.json"
   readonly property var speeds: RainModel.speedOptions()
   readonly property var looks: RainModel.lookOptions()
-  readonly property var sections: RainModel.panelSections(look)
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property bool followWeather: RainModel.followWeatherActive(mode, resumeMode)
+  readonly property var sections: RainModel.panelSections(look, followWeather)
   readonly property bool headerHasCursor: cursorActive && focusSection === "power"
   readonly property string toggleHint: mode === "off" ? "Turn rain on" : "Turn rain off"
   property string mode: "auto"
@@ -57,6 +57,8 @@ Panel {
     lookIndex = selectedLookIndex()
     if (root.look !== "matrix" && root.focusSection === "glyphs")
       root.focusSection = "look"
+    if (RainModel.followWeatherActive(merged.mode, merged.resumeMode) && root.focusSection === "intensity")
+      root.focusSection = "weather"
     if (!mkdirProc.running) mkdirProc.running = true
     modeFile.setText(RainModel.stateFileBody(merged.mode, merged.weatherCode, merged.speed, merged.look, merged.script, merged.resumeMode, merged.intensity))
     if (sharedService && typeof sharedService.syncFromPanel === "function")
@@ -133,6 +135,14 @@ Panel {
 
   function clampSection() {
     if (sections.indexOf(focusSection) >= 0) return
+    if (focusSection === "intensity") {
+      focusSection = "speed"
+      return
+    }
+    if (focusSection === "glyphs") {
+      focusSection = "look"
+      return
+    }
     focusSection = sections[0]
   }
 
@@ -400,7 +410,7 @@ Panel {
           Toggle {
             width: parent.width
             label: "Follow weather"
-            description: "Rain when the forecast is wet."
+            description: "Follows the system weather location. Rains only when the forecast is wet."
             checked: root.followWeather
             hasCursor: root.cursorActive && root.focusSection === "weather"
             foreground: root.foreground
@@ -415,6 +425,7 @@ Panel {
           }
 
           Column {
+            visible: !root.followWeather
             width: parent.width
             spacing: Style.space(6)
 
@@ -442,7 +453,6 @@ Panel {
                 anchors.right: parent.right
                 anchors.rightMargin: Style.space(6)
                 anchors.verticalCenter: parent.verticalCenter
-                opacity: root.followWeather ? 0.5 : 1
               }
             }
 
@@ -453,7 +463,6 @@ Panel {
               hasCursor: root.cursorActive && root.focusSection === "intensity"
               foreground: root.foreground
               outline: true
-              opacity: root.followWeather ? 0.5 : 1
 
               PanelSlider {
                 id: intensitySlider
@@ -467,7 +476,6 @@ Panel {
                 integer: true
                 tickCount: 4
                 value: RainModel.intensityIndex(root.intensity)
-                enabled: !root.followWeather
                 onMoved: function(v) {
                   root.setIntensity(RainModel.intensityFromIndex(v))
                 }
