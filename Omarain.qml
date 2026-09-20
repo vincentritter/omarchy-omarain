@@ -22,6 +22,11 @@ Panel {
   readonly property var sections: RainModel.panelSections(look, followWeather)
   readonly property bool headerHasCursor: cursorActive && focusSection === "power"
   readonly property string toggleHint: mode === "off" ? "Turn rain on" : "Turn rain off"
+  readonly property color dim: Qt.darker(foreground, 1.4)
+  readonly property string repoUrl: "https://github.com/vincentritter/omarchy-omarain"
+  readonly property string siteUrl: "https://vincentritter.com?ts=omarain"
+  property bool helpOpen: false
+  property bool pendingHelpOpen: false
   property string mode: "auto"
   property string speed: "calm"
   property string look: "theme"
@@ -43,6 +48,13 @@ Panel {
     if (mode === "auto") return RainModel.weatherHint(weatherCode)
     if (mode === "off") return "Paused"
     return RainModel.modeLabel(mode) + " rain"
+  }
+
+  function showHelp(open) {
+    var next = open === true
+    if (helpOpen === next || pageFlip.running) return
+    pendingHelpOpen = next
+    pageFlip.restart()
   }
 
   function persistMerged(merged) {
@@ -286,6 +298,44 @@ Panel {
     }
   }
 
+  onOpenedChanged: {
+    if (opened) return
+    pageFlip.stop()
+    helpOpen = false
+    pendingHelpOpen = false
+    if (cardRotation) cardRotation.angle = 0
+  }
+
+  SequentialAnimation {
+    id: pageFlip
+    NumberAnimation {
+      target: cardRotation
+      property: "angle"
+      from: 0
+      to: 90
+      duration: 130
+      easing.type: Easing.InQuad
+    }
+    ScriptAction {
+      script: {
+        root.helpOpen = root.pendingHelpOpen
+        cardRotation.angle = -90
+        if (panelFlick) panelFlick.contentY = 0
+      }
+    }
+    NumberAnimation {
+      target: cardRotation
+      property: "angle"
+      from: -90
+      to: 0
+      duration: 170
+      easing.type: Easing.OutQuad
+    }
+    ScriptAction {
+      script: Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    }
+  }
+
   Component.onCompleted: {
     if (sharedService) {
       mode = RainModel.normalizeMode(sharedService.mode)
@@ -332,20 +382,39 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(560))
+    contentHeight: panel.fittedContentHeight(
+      root.helpOpen ? helpPage.implicitHeight : column.implicitHeight,
+      Style.space(560)
+    )
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
       onMoveRequested: function(dx, dy) {
-        root.moveCursor(dx, dy)
+        if (!root.helpOpen) root.moveCursor(dx, dy)
       }
-      onActivateRequested: root.activateCursor()
-      onCloseRequested: root.close()
+      onActivateRequested: if (!root.helpOpen) root.activateCursor()
+      onCloseRequested: {
+        if (root.helpOpen) root.showHelp(false)
+        else root.close()
+      }
       onTabRequested: function(direction) { root.switchPanel(direction) }
+
+      Item {
+        id: pageCard
+        anchors.fill: parent
+        transform: Rotation {
+          id: cardRotation
+          origin.x: pageCard.width / 2
+          origin.y: pageCard.height / 2
+          axis.x: 0
+          axis.y: 1
+          axis.z: 0
+        }
 
       Flickable {
         id: panelFlick
+        visible: !root.helpOpen
         anchors.fill: parent
         contentWidth: width
         contentHeight: column.implicitHeight
@@ -385,18 +454,34 @@ Panel {
                 }
               }
               trailingControl: Component {
-                ToggleSwitch {
-                  id: powerSwitch
-                  checked: root.mode !== "off"
-                  hasCursor: header.ringVisible
-                  foreground: hero.foreground
-                  onHovered: function(on) { if (on) header.focusHero() }
-                  onToggled: root.toggleRain()
+                Row {
+                  spacing: Style.space(6)
+                  height: Math.max(helpButton.implicitHeight, powerSwitch.implicitHeight)
 
-                  PanelToolTip {
-                    visible: powerSwitch.containsMouse
-                    text: root.toggleHint
+                  PanelActionButton {
+                    id: helpButton
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconText: "󰋗"
+                    tooltipText: "About Omarain"
+                    foreground: hero.foreground
                     fontFamily: hero.fontFamily
+                    onClicked: root.showHelp(true)
+                  }
+
+                  ToggleSwitch {
+                    id: powerSwitch
+                    anchors.verticalCenter: parent.verticalCenter
+                    checked: root.mode !== "off"
+                    hasCursor: header.ringVisible
+                    foreground: hero.foreground
+                    onHovered: function(on) { if (on) header.focusHero() }
+                    onToggled: root.toggleRain()
+
+                    PanelToolTip {
+                      visible: powerSwitch.containsMouse
+                      text: root.toggleHint
+                      fontFamily: hero.fontFamily
+                    }
                   }
                 }
               }
@@ -668,6 +753,130 @@ Panel {
           }
         }
       }
+
+      Column {
+        id: helpPage
+        visible: root.helpOpen
+        width: parent.width
+        spacing: Style.space(12)
+
+        Item {
+          width: parent.width
+          implicitHeight: Math.max(helpBackButton.implicitHeight, helpLabels.implicitHeight)
+
+          PanelActionButton {
+            id: helpBackButton
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            iconText: "󰁍"
+            tooltipText: "Back"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: root.showHelp(false)
+          }
+
+          Column {
+            id: helpLabels
+            anchors.left: helpBackButton.right
+            anchors.leftMargin: Style.space(10)
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(3)
+
+            Text {
+              textFormat: Text.PlainText
+              text: "ABOUT"
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
+            }
+          }
+        }
+
+        PanelSeparator {
+          foreground: root.foreground
+        }
+
+        Text {
+          width: parent.width
+          textFormat: Text.PlainText
+          text: "A quiet rain overlay for Omarchy, by Vincent Ritter."
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          wrapMode: Text.WordWrap
+        }
+
+        Column {
+          width: parent.width
+          spacing: Style.space(8)
+
+          HelpCreditLine {
+            prefix: "BUILT BY "
+            linkText: "VINCENT RITTER"
+            url: root.siteUrl
+            tracking: 1.2
+          }
+
+          HelpCreditLine {
+            prefix: "View this plugin on "
+            linkText: "GitHub"
+            url: root.repoUrl
+          }
+        }
+      }
+      }
+    }
+  }
+
+  component HelpCreditLine: Row {
+    id: creditLine
+
+    property string prefix: ""
+    property string linkText: ""
+    property string url: ""
+    property real tracking: 0
+
+    spacing: 0
+
+    Text {
+      textFormat: Text.PlainText
+      text: creditLine.prefix
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      font.bold: true
+      font.letterSpacing: creditLine.tracking
+    }
+
+    HelpLink {
+      text: creditLine.linkText
+      url: creditLine.url
+      tracking: creditLine.tracking
+    }
+  }
+
+  component HelpLink: Text {
+    id: helpLink
+
+    property string url: ""
+    property real tracking: 0
+
+    color: helpLinkMouse.containsMouse ? root.foreground : root.dim
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+    font.bold: true
+    font.underline: true
+    font.letterSpacing: tracking
+    textFormat: Text.PlainText
+
+    MouseArea {
+      id: helpLinkMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: if (helpLink.url !== "") Util.execArgv(["xdg-open", helpLink.url])
     }
   }
 }

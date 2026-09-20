@@ -6,7 +6,7 @@ It sits on Hyprland’s bottom layer, so windows and the bar stay above it. The 
 
 If the machine exposes an accelerometer (IIO or Apple SMC `position`), tilting the chassis leans the rain.
 
-Left-click the bar icon to open the panel. The switch turns rain off and on, restoring the last mode. Follow weather rains at the weather widget's location while it is raining outside, with volume from Open-Meteo. Intensity is Light, Steady, Heavy, or Torrential, and the slider hides while Follow weather is on. Speed is Calm, Natural, or Hyper-gravity. Look is Theme, Candy, Matrix, or Amber. Candy is a mixed neon field. Matrix can fall as glyphs instead of pixels. Right-click the icon to turn rain off and on without opening the panel.
+Left-click the bar icon to open the panel. The switch turns rain off and on, restoring the last mode. The question mark opens a short about page, with a link to the GitHub repo. Follow weather rains at the weather widget's location while it is raining outside, with volume from Open-Meteo. Intensity is Light, Steady, Heavy, or Torrential, and the slider hides while Follow weather is on. Speed is Calm, Natural, or Hyper-gravity. Look is Theme, Candy, Matrix, or Amber. Candy is a mixed neon field. Matrix can fall as glyphs instead of pixels. Right-click the icon to turn rain off and on without opening the panel.
 
 ## Install
 
