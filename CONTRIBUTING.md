@@ -2,7 +2,7 @@
 
 This file is for someone changing Omarain. How to install and use it lives in [README.md](README.md).
 
-Omarain is an Omarchy bar plugin with a wallpaper rain service. Work in this checkout. Do not create a git worktree.
+Omarain is an Omarchy bar plugin with a wallpaper rain service.
 
 ## Layout
 
