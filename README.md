@@ -8,19 +8,17 @@ It sits on Hyprland’s bottom layer, so windows and the bar stay above it. The 
 
 If the machine exposes an accelerometer (IIO or Apple SMC `position`), tilting the chassis leans the rain.
 
-Left-click the bar icon to open the panel. The switch turns rain off and on, restoring the last mode. The question mark opens a short about page, with a link to the GitHub repo. Follow weather rains at the weather widget's location while it is raining outside, with volume from Open-Meteo. Intensity is Light, Steady, Heavy, or Torrential, and the slider hides while Follow weather is on. Speed is Calm, Natural, or Hyper-gravity. Look is Theme, Candy, Matrix, or Amber. Candy is a mixed neon field. Matrix can fall as glyphs instead of pixels. Right-click the icon to turn rain off and on without opening the panel.
+Left-click the bar icon to open the panel. The switch turns rain off and on, restoring the last mode. Follow weather rains at the weather widget's location while it is raining outside, with volume from Open-Meteo. Intensity is Light, Steady, Heavy, or Torrential, and the slider hides while Follow weather is on. Speed is Calm, Natural, or Hyper-gravity. Look is Theme, Candy, Matrix, or Amber. Candy is a mixed neon field. Matrix can fall as glyphs instead of pixels. Right-click the icon to turn rain off and on without opening the panel.
 
 ![Omarain panel](preview.png)
 
 ## Install
 
-The repo is private, so clone it over SSH and enable the plugin:
-
 ```bash
-omarchy plugin add git@github.com:vincentritter/omarchy-omarain.git --enable
+omarchy plugin add https://github.com/vincentritter/omarchy-omarain.git --enable
 ```
 
-That lands in `~/.config/omarchy/plugins/vincentritter.omarain`. Host the widget in Tinytray, or leave it on the right of the bar. Disable with `omarchy plugin disable vincentritter.omarain`. Remove with `omarchy plugin remove vincentritter.omarain`.
+That lands in `~/.config/omarchy/plugins/vincentritter.omarain`. Omarain complements [Tinytray](https://github.com/vincentritter/omarchy-tinytray): rain on the wallpaper, widgets in the drawer. Host it there, or leave it on the right of the bar. Disable with `omarchy plugin disable vincentritter.omarain`. Remove with `omarchy plugin remove vincentritter.omarain`.
 
 ## Tests
 
