@@ -410,7 +410,7 @@ Panel {
           Toggle {
             width: parent.width
             label: "Follow weather"
-            description: "Follows the system weather location. Rains only when the forecast is wet."
+            description: "Rain at the weather widget's location while it is raining outside."
             checked: root.followWeather
             hasCursor: root.cursorActive && root.focusSection === "weather"
             foreground: root.foreground
