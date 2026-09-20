@@ -573,6 +573,29 @@ test("candy look swatch is a stripe of palette colors", () => {
   assert.deepEqual(RainModel.lookSwatches("theme"), [])
 })
 
+test("fetch URLs only allow Open-Meteo and geojs over https", () => {
+  assert.equal(RainModel.fetchUrlAllowed(RainModel.forecastUrl({ latitude: 50, longitude: 20 })), true)
+  assert.equal(RainModel.fetchUrlAllowed(RainModel.locateUrl({ name: "Krakow" })), true)
+  assert.equal(RainModel.fetchUrlAllowed(RainModel.locateUrl({})), true)
+  assert.equal(RainModel.fetchUrlAllowed("http://api.open-meteo.com/v1/forecast"), false)
+  assert.equal(RainModel.fetchUrlAllowed("https://evil.example/v1/forecast"), false)
+  assert.equal(RainModel.fetchUrlAllowed("https://api.open-meteo.com.evil/"), false)
+})
+
+test("about links only open Vincent's site and this repo", () => {
+  assert.equal(RainModel.openUrlAllowed("https://vincentritter.com?ts=omarain"), true)
+  assert.equal(RainModel.openUrlAllowed("https://github.com/vincentritter/omarchy-omarain"), true)
+  assert.equal(RainModel.openUrlAllowed("https://github.com/vincentritter/omarchy-omarain/issues"), true)
+  assert.equal(RainModel.openUrlAllowed("https://github.com/evil/repo"), false)
+  assert.equal(RainModel.openUrlAllowed("javascript:alert(1)"), false)
+  assert.equal(RainModel.openUrlAllowed("https://evil.example/@vincentritter.com/"), false)
+})
+
+test("state files larger than the cap are ignored", () => {
+  const parsed = RainModel.parseStateFile('{"mode":"heavy","pad":"' + "x".repeat(70000) + '"}')
+  assert.equal(parsed.mode, "auto")
+})
+
 test("matrix look keeps glyphs on the extra panel section", () => {
   assert.deepEqual(RainModel.panelSections("theme"), ["power", "weather", "intensity", "speed", "look"])
   assert.deepEqual(RainModel.panelSections("matrix"), ["power", "weather", "intensity", "speed", "look", "glyphs"])

@@ -12,7 +12,7 @@ If the machine exposes an accelerometer (IIO or Apple SMC `position`), tilting t
 
 Left-click the bar icon to open the panel. The switch turns rain off and on, restoring the last mode. Right-click the icon to do the same without opening the panel.
 
-Follow weather rains at the weather widget's location while it is raining outside. The panel also sets intensity, speed, and look. Candy is mixed neon; Matrix can fall as glyphs.
+Follow weather rains at the weather widget's location while it is raining outside. If that location is missing, Omarain asks geojs for an IP location, then Open-Meteo for the current conditions. The panel also sets intensity, speed, and look. Candy is mixed neon; Matrix can fall as glyphs.
 
 ![Omarain panel](preview.png)
 
@@ -30,7 +30,7 @@ That lands in `~/.config/omarchy/plugins/vincentritter.omarain`. Omarain complem
 omarchy plugin remove vincentritter.omarain --yes
 ```
 
-Disable without removing with `omarchy plugin disable vincentritter.omarain`.
+Disable without removing with `omarchy plugin disable vincentritter.omarain`. `~/.local/state/omarchy/omarain.json` is left in place so a later install can restore intensity, look, and speed.
 
 ## Tests
 

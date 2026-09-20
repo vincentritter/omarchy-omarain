@@ -16,6 +16,11 @@ Item {
   readonly property string stateDir: home + "/.local/state/omarchy"
   readonly property string modePath: stateDir + "/omarain.json"
   readonly property string weatherPath: home + "/.local/state/omarchy/settings/weather.json"
+  readonly property string helper: String(Qt.resolvedUrl("state-io.py")).replace(/^file:\/\//, "")
+
+  function helperCmd(args) {
+    return ["/usr/bin/python3", "-I", "-S", root.helper].concat(args)
+  }
 
   property string mode: "auto"
   property string speed: "calm"
@@ -176,8 +181,10 @@ Item {
 
   function persistMode() {
     if (!root.modeLoaded) return
-    if (!mkdirProc.running) mkdirProc.running = true
-    modeFile.setText(RainModel.stateFileBody(root.mode, root.weatherCode, root.speed, root.look, root.script, root.resumeMode, root.intensity))
+    stateWrite.pending = RainModel.stateFileBody(root.mode, root.weatherCode, root.speed, root.look, root.script, root.resumeMode, root.intensity)
+    stateWrite.command = root.helperCmd(["write", "omarain.json"])
+    stateWrite.running = false
+    stateWrite.running = true
   }
 
   function applyWeather(raw) {
@@ -218,52 +225,88 @@ Item {
       return
     }
     var url = RainModel.forecastUrl(root.location) || RainModel.locateUrl(root.location)
-    if (!url) return
-    forecastProc.command = ["curl", "-fsS", "--max-time", "8", url]
+    if (!url || !RainModel.fetchUrlAllowed(url)) return
+    forecastProc.command = root.helperCmd(["fetch", "--", url])
     forecastProc.running = true
   }
 
-  Process {
-    id: mkdirProc
-    command: ["mkdir", "-p", root.stateDir]
+  function applyStateText(raw) {
+    var next = RainModel.parseStateFile(raw)
+    var dirty = next.mode !== root.mode || next.speed !== root.speed || next.look !== root.look || next.script !== root.script
+    if (next.weatherCode != null && next.weatherCode !== root.weatherCode) {
+      root.weatherCode = next.weatherCode
+      dirty = true
+    }
+    root.mode = next.mode
+    root.speed = next.speed
+    root.look = next.look
+    root.script = next.script
+    root.resumeMode = next.resumeMode
+    root.intensity = next.intensity
+    root.modeLoaded = true
+    if (dirty) root.bumpConfig()
   }
 
   FileView {
     id: modeFile
     path: root.modePath
+    preload: false
+    blockAllReads: true
     watchChanges: true
-    atomicWrites: true
     printErrors: false
-    onFileChanged: reload()
-    onLoaded: {
-      var next = RainModel.parseStateFile(text())
-      var dirty = next.mode !== root.mode || next.speed !== root.speed || next.look !== root.look || next.script !== root.script
-      if (next.weatherCode != null && next.weatherCode !== root.weatherCode) {
-        root.weatherCode = next.weatherCode
-        dirty = true
-      }
-      root.mode = next.mode
-      root.speed = next.speed
-      root.look = next.look
-      root.script = next.script
-      root.resumeMode = next.resumeMode
-      root.intensity = next.intensity
-      root.modeLoaded = true
-      if (dirty) root.bumpConfig()
+    onFileChanged: {
+      stateRead.running = false
+      stateRead.running = true
     }
-    onLoadFailed: root.modeLoaded = true
   }
 
   FileView {
     id: weatherFile
     path: root.weatherPath
+    preload: false
+    blockAllReads: true
     watchChanges: true
     printErrors: false
-    onLoaded: {
-      root.location = RainModel.parseLocationFile(text())
-      root.refreshWeather()
+    onFileChanged: {
+      weatherRead.running = false
+      weatherRead.running = true
     }
-    onLoadFailed: {
+  }
+
+  Process {
+    id: stateRead
+    command: root.helperCmd(["read", "omarain.json"])
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.applyStateText(String(text || ""))
+    }
+    onExited: function(code) {
+      if (code !== 0) root.modeLoaded = true
+    }
+  }
+
+  Process {
+    id: stateWrite
+    property string pending: ""
+    stdinEnabled: true
+    onStarted: {
+      write(pending)
+      stdinEnabled = false
+    }
+  }
+
+  Process {
+    id: weatherRead
+    command: root.helperCmd(["read-weather"])
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.location = RainModel.parseLocationFile(String(text || ""))
+        root.refreshWeather()
+      }
+    }
+    onExited: function(code) {
+      if (code === 0) return
       root.location = RainModel.parseLocationFile("")
       root.refreshWeather()
     }
@@ -297,16 +340,9 @@ Item {
     onTriggered: if (root.weatherCode == null) root.refreshWeather()
   }
 
-  Timer {
-    interval: 500
-    running: true
-    repeat: true
-    onTriggered: modeFile.reload()
-  }
-
   Process {
     id: tiltProc
-    command: ["sh", Qt.resolvedUrl("read-tilt").toString().replace(/^file:\/\//, "")]
+    command: root.helperCmd(["tilt"])
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -336,8 +372,8 @@ Item {
   }
 
   Component.onCompleted: {
-    mkdirProc.running = true
-    Qt.callLater(root.refreshWeather)
+    stateRead.running = true
+    weatherRead.running = true
   }
 
   Variants {

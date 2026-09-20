@@ -6,7 +6,7 @@ Omarain is an Omarchy bar plugin with a wallpaper rain service.
 
 ## Layout
 
-`Omarain.qml` is the bar widget and panel. `Service.qml` draws the rain field and fetches weather. Decisions that can be tested without Quickshell belong in `RainModel.js`. `OmarainIcon.qml` draws the bar and hero mark as QML rectangles, not a rasterized SVG. `LookRain.qml` is the chip-hover preview. `read-tilt` reads the accelerometer when the machine exposes one.
+`Omarain.qml` is the bar widget and panel. `Service.qml` draws the rain field and fetches weather. Decisions that can be tested without Quickshell belong in `RainModel.js`. `OmarainIcon.qml` draws the bar and hero mark as QML rectangles, not a rasterized SVG. `LookRain.qml` is the chip-hover preview. `state-io.py` reads and writes state, fetches weather, and reads the accelerometer. Do not go back to `FileView.setText`, `curl`, or `StdioCollector` on an unbounded child.
 
 The live copy Omarchy loads is `~/.config/omarchy/plugins/vincentritter.omarain`. Copy changed files there and run `omarchy restart shell`. Plugin hot reload of QML is unreliable; a restart is the check that counts.
 
@@ -30,7 +30,7 @@ Keep comments out of QML and JS unless the code cannot express a constraint.
 
 ## Persistence
 
-Rain state lives in `~/.local/state/omarchy/omarain.json`. Weather location is `~/.local/state/omarchy/settings/weather.json` and may be missing. Writes go through `mergeState` so a mode change does not drop intensity, resume mode, look, or speed.
+Rain state lives in `~/.local/state/omarchy/omarain.json`. Weather location is `~/.local/state/omarchy/settings/weather.json` and may be missing. Reads and writes go through `state-io.py` with `O_NOFOLLOW` and a 64KiB cap. `FileView` is a watcher only (`preload: false`, `blockAllReads: true`). Fetch hosts are Open-Meteo and geojs over HTTPS. About links are `xdg-open --` after `openUrlAllowed`. IPC is `open`, `close`, `toggle`, and `toggleRain` only. Writes go through `mergeState` so a mode change does not drop intensity, resume mode, look, or speed.
 
 ## Screenshots
 

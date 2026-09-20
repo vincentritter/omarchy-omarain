@@ -247,7 +247,8 @@ function windXFromPayload(raw) {
   var text = String(raw || "").replace(/^\s+|\s+$/g, "")
   if (!text) return 0
   try {
-    var data = JSON.parse(text)
+    var data = boundedJson(text, 65536)
+    if (!data) return 0
     var speed = 0
     var fromDeg = 0
     if (data && data.current) {
@@ -310,7 +311,8 @@ function weatherCodeFromPayload(raw) {
   var text = String(raw || "").replace(/^\s+|\s+$/g, "")
   if (!text) return null
   try {
-    var data = JSON.parse(text)
+    var data = boundedJson(text, 65536)
+    if (!data) return null
     if (data && data.current && data.current.weather_code != null) {
       var wmo = Number(data.current.weather_code)
       return isFinite(wmo) ? wmo : null
@@ -327,7 +329,8 @@ function precipitationFromPayload(raw) {
   var text = String(raw || "").replace(/^\s+|\s+$/g, "")
   if (!text) return null
   try {
-    var data = JSON.parse(text)
+    var data = boundedJson(text, 65536)
+    if (!data) return null
     if (data && data.current && data.current.precipitation != null) {
       var mm = Number(data.current.precipitation)
       return isFinite(mm) ? mm : null
@@ -358,7 +361,8 @@ function locationFromWttrPayload(raw) {
   var text = String(raw || "").replace(/^\s+|\s+$/g, "")
   if (!text) return null
   try {
-    var data = JSON.parse(text)
+    var data = boundedJson(text, 65536)
+    if (!data) return null
     var area = data && data.nearest_area && data.nearest_area[0]
     if (!area) return null
     var name = ""
@@ -374,8 +378,8 @@ function locationFromLocatePayload(raw) {
   var text = String(raw || "").replace(/^\s+|\s+$/g, "")
   if (!text) return null
   try {
-    var data = JSON.parse(text)
-    if (!data || typeof data !== "object") return null
+    var data = boundedJson(text, 65536)
+    if (!data) return null
     if (data.current && data.current.weather_code != null) return null
     var result = data.results && data.results[0]
     if (result) return coordsFrom(result.latitude, result.longitude, result.name)
@@ -390,8 +394,8 @@ function locationFromLocatePayload(raw) {
 function parseLocationFile(raw) {
   var unset = { name: "", latitude: null, longitude: null }
   try {
-    var data = JSON.parse(String(raw || ""))
-    if (!data || typeof data !== "object") return unset
+    var data = boundedJson(raw, 65536)
+    if (!data) return unset
     var latitude = parseFloat(data.latitude)
     var longitude = parseFloat(data.longitude)
     var hasCoordinates = !isNaN(latitude) && !isNaN(longitude)
@@ -402,6 +406,48 @@ function parseLocationFile(raw) {
     }
   } catch (e) {
     return unset
+  }
+}
+
+function parseHttpsUrl(url) {
+  var text = String(url || "")
+  if (text.length < 8 || text.length > 2048) return null
+  var match = /^https:\/\/([a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?)(\/[^?#]*)?(\?[^#]*)?$/i.exec(text)
+  if (!match) return null
+  var host = match[1].toLowerCase()
+  if (host.indexOf("..") !== -1) return null
+  return { host: host, path: match[2] || "/", query: match[3] || "" }
+}
+
+function fetchUrlAllowed(url) {
+  var parsed = parseHttpsUrl(url)
+  if (!parsed) return false
+  return parsed.host === "api.open-meteo.com"
+    || parsed.host === "geocoding-api.open-meteo.com"
+    || parsed.host === "get.geojs.io"
+}
+
+function openUrlAllowed(url) {
+  var parsed = parseHttpsUrl(url)
+  if (!parsed) return false
+  if (parsed.host === "vincentritter.com" || parsed.host === "www.vincentritter.com") return true
+  if (parsed.host === "github.com") {
+    return parsed.path === "/vincentritter/omarchy-omarain"
+      || parsed.path.indexOf("/vincentritter/omarchy-omarain/") === 0
+  }
+  return false
+}
+
+function boundedJson(raw, maxBytes) {
+  var text = String(raw || "")
+  var cap = maxBytes || 65536
+  if (text.length > cap) return null
+  try {
+    var data = JSON.parse(text)
+    if (!data || typeof data !== "object") return null
+    return data
+  } catch (e) {
+    return null
   }
 }
 
@@ -416,7 +462,8 @@ function parseStateFile(raw) {
     intensity: "steady"
   }
   try {
-    var data = JSON.parse(String(raw || ""))
+    var data = boundedJson(raw, 65536)
+    if (!data) return out
     if (!data || typeof data !== "object") return out
     out.mode = normalizeMode(data.mode)
     out.speed = normalizeSpeed(data.speed)
@@ -1235,6 +1282,10 @@ if (typeof module !== "undefined") {
     modeFileBody: modeFileBody,
     forecastUrl: forecastUrl,
     locateUrl: locateUrl,
+    parseHttpsUrl: parseHttpsUrl,
+    fetchUrlAllowed: fetchUrlAllowed,
+    openUrlAllowed: openUrlAllowed,
+    boundedJson: boundedJson,
     cycleMode: cycleMode,
     modeLabel: modeLabel,
     weatherHint: weatherHint,

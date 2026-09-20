@@ -71,10 +71,13 @@ Panel {
       root.focusSection = "look"
     if (RainModel.followWeatherActive(merged.mode, merged.resumeMode) && root.focusSection === "intensity")
       root.focusSection = "weather"
-    if (!mkdirProc.running) mkdirProc.running = true
-    modeFile.setText(RainModel.stateFileBody(merged.mode, merged.weatherCode, merged.speed, merged.look, merged.script, merged.resumeMode, merged.intensity))
     if (sharedService && typeof sharedService.syncFromPanel === "function")
       sharedService.syncFromPanel(merged)
+    else {
+      stateWrite.pending = RainModel.stateFileBody(merged.mode, merged.weatherCode, merged.speed, merged.look, merged.script, merged.resumeMode, merged.intensity)
+      stateWrite.running = false
+      stateWrite.running = true
+    }
   }
 
   function selectedSpeedIndex() {
@@ -91,8 +94,12 @@ Panel {
     return 0
   }
 
+  function currentStateText() {
+    return RainModel.stateFileBody(root.mode, root.weatherCode, root.speed, root.look, root.script, root.resumeMode, root.intensity)
+  }
+
   function setMode(next) {
-    var merged = RainModel.mergeState(modeFile.text(), next, root.weatherCode, root.speed, root.look, root.script, root.resumeMode, root.intensity)
+    var merged = RainModel.mergeState(currentStateText(), next, root.weatherCode, root.speed, root.look, root.script, root.resumeMode, root.intensity)
     persistMerged(merged)
   }
 
@@ -102,7 +109,7 @@ Panel {
       intensity: root.intensity,
       resumeMode: root.resumeMode
     }, follow)
-    var merged = RainModel.mergeState(modeFile.text(), applied.mode, root.weatherCode, root.speed, root.look, root.script, applied.resumeMode, applied.intensity)
+    var merged = RainModel.mergeState(currentStateText(), applied.mode, root.weatherCode, root.speed, root.look, root.script, applied.resumeMode, applied.intensity)
     persistMerged(merged)
   }
 
@@ -112,12 +119,12 @@ Panel {
       intensity: root.intensity,
       resumeMode: root.resumeMode
     }, next)
-    var merged = RainModel.mergeState(modeFile.text(), applied.mode, root.weatherCode, root.speed, root.look, root.script, applied.resumeMode, applied.intensity)
+    var merged = RainModel.mergeState(currentStateText(), applied.mode, root.weatherCode, root.speed, root.look, root.script, applied.resumeMode, applied.intensity)
     persistMerged(merged)
   }
 
   function setSpeed(next) {
-    var merged = RainModel.mergeState(modeFile.text(), root.mode, root.weatherCode, next, root.look, root.script, root.resumeMode, root.intensity)
+    var merged = RainModel.mergeState(currentStateText(), root.mode, root.weatherCode, next, root.look, root.script, root.resumeMode, root.intensity)
     persistMerged(merged)
   }
 
@@ -125,13 +132,13 @@ Panel {
     var look = RainModel.normalizeLook(next)
     var script = root.script
     if (look === "matrix" && root.look !== "matrix") script = "glyphs"
-    var merged = RainModel.mergeState(modeFile.text(), root.mode, root.weatherCode, root.speed, look, script, root.resumeMode, root.intensity)
+    var merged = RainModel.mergeState(currentStateText(), root.mode, root.weatherCode, root.speed, look, script, root.resumeMode, root.intensity)
     persistMerged(merged)
   }
 
   function setGlyphs(on) {
     if (root.look !== "matrix") return
-    var merged = RainModel.mergeState(modeFile.text(), root.mode, root.weatherCode, root.speed, "matrix", on ? "glyphs" : "pixels", root.resumeMode, root.intensity)
+    var merged = RainModel.mergeState(currentStateText(), root.mode, root.weatherCode, root.speed, "matrix", on ? "glyphs" : "pixels", root.resumeMode, root.intensity)
     persistMerged(merged)
   }
 
@@ -141,7 +148,7 @@ Panel {
 
   function toggleRain() {
     var next = RainModel.toggleOnOff(root.mode, root.resumeMode)
-    var merged = RainModel.mergeState(modeFile.text(), next.mode, root.weatherCode, root.speed, root.look, root.script, next.resumeMode, root.intensity)
+    var merged = RainModel.mergeState(currentStateText(), next.mode, root.weatherCode, root.speed, root.look, root.script, next.resumeMode, root.intensity)
     persistMerged(merged)
   }
 
@@ -225,40 +232,27 @@ Panel {
     function open(): void { root.open() }
     function close(): void { root.close() }
     function toggle(): void { root.toggle() }
-    function setMode(mode: string): void { root.setMode(mode) }
-    function setSpeed(speed: string): void { root.setSpeed(speed) }
-    function setLook(look: string): void { root.setLook(look) }
-    function cycle(): void { root.cycleMode() }
     function toggleRain(): void { root.toggleRain() }
   }
 
   Process {
-    id: mkdirProc
-    command: ["mkdir", "-p", root.home + "/.local/state/omarchy"]
+    id: stateWrite
+    property string pending: ""
+    stdinEnabled: true
+    command: ["/usr/bin/python3", "-I", "-S", String(Qt.resolvedUrl("state-io.py")).replace(/^file:\/\//, ""), "write", "omarain.json"]
+    onStarted: {
+      write(pending)
+      stdinEnabled = false
+    }
   }
 
   FileView {
     id: modeFile
     path: root.modePath
+    preload: false
+    blockAllReads: true
     watchChanges: true
-    atomicWrites: true
     printErrors: false
-    onFileChanged: reload()
-    onLoaded: {
-      var next = RainModel.parseStateFile(text())
-      if (next.mode !== root.mode) {
-        root.mode = next.mode
-      }
-      if (next.weatherCode != null) root.weatherCode = next.weatherCode
-      root.speed = next.speed
-      if (!root.opened) root.speedIndex = root.selectedSpeedIndex()
-      root.look = next.look
-      if (!root.opened) root.lookIndex = root.selectedLookIndex()
-      root.script = next.script
-      root.resumeMode = next.resumeMode
-      root.intensity = next.intensity
-    }
-    onLoadFailed: root.mode = "auto"
   }
 
   Connections {
@@ -347,8 +341,6 @@ Panel {
       intensity = RainModel.normalizeIntensity(sharedService.intensity)
       speedIndex = selectedSpeedIndex()
       lookIndex = selectedLookIndex()
-    } else {
-      modeFile.reload()
     }
   }
 
@@ -876,7 +868,10 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onClicked: if (helpLink.url !== "") Util.execArgv(["xdg-open", helpLink.url])
+      onClicked: {
+        if (!RainModel.openUrlAllowed(helpLink.url)) return
+        Quickshell.execDetached(["/usr/bin/xdg-open", "--", helpLink.url])
+      }
     }
   }
 }
