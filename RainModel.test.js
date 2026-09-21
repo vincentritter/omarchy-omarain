@@ -769,6 +769,13 @@ test("candy drops pick different tints", () => {
   assert.ok(Object.keys(tints).length >= 3)
 })
 
+test("speed chip index highlights the saved speed", () => {
+  assert.equal(RainModel.speedChipIndex("calm"), 0)
+  assert.equal(RainModel.speedChipIndex("natural"), 1)
+  assert.equal(RainModel.speedChipIndex("hyper"), 2)
+  assert.equal(RainModel.speedChipIndex(""), 0)
+})
+
 test("unknown speeds fall back to calm", () => {
   assert.equal(RainModel.normalizeSpeed("calm"), "calm")
   assert.equal(RainModel.normalizeSpeed("natural"), "natural")

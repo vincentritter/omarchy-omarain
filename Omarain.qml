@@ -14,6 +14,11 @@ Panel {
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string modePath: home + "/.local/state/omarchy/omarain.json"
+  readonly property string helper: String(Qt.resolvedUrl("state-io.py")).replace(/^file:\/\//, "")
+
+  function helperCmd(args) {
+    return ["/usr/bin/python3", "-I", "-S", root.helper].concat(args)
+  }
   readonly property var speeds: RainModel.speedOptions()
   readonly property var looks: RainModel.lookOptions()
   readonly property color foreground: bar ? bar.foreground : Color.foreground
@@ -41,6 +46,12 @@ Panel {
 
   readonly property var sharedService: bar && bar.shell && typeof bar.shell.serviceFor === "function"
     ? bar.shell.serviceFor(moduleName) : null
+  readonly property string displayedSpeed: sharedService
+    ? RainModel.normalizeSpeed(sharedService.speed)
+    : RainModel.normalizeSpeed(speed)
+  readonly property string displayedLook: sharedService
+    ? RainModel.normalizeLook(sharedService.look)
+    : RainModel.normalizeLook(look)
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -88,7 +99,7 @@ Panel {
     root.resumeMode = merged.resumeMode
     root.intensity = merged.intensity
     root.weatherCode = merged.weatherCode
-    speedIndex = selectedSpeedIndex()
+    speedIndex = RainModel.speedChipIndex(merged.speed)
     lookIndex = selectedLookIndex()
     if (root.look !== "matrix" && root.focusSection === "glyphs")
       root.focusSection = "look"
@@ -104,10 +115,7 @@ Panel {
   }
 
   function selectedSpeedIndex() {
-    for (var i = 0; i < speeds.length; i++) {
-      if (speeds[i].value === speed) return i
-    }
-    return 0
+    return RainModel.speedChipIndex(displayedSpeed)
   }
 
   function selectedLookIndex() {
@@ -270,10 +278,19 @@ Panel {
     id: stateWrite
     property string pending: ""
     stdinEnabled: true
-    command: ["/usr/bin/python3", "-I", "-S", String(Qt.resolvedUrl("state-io.py")).replace(/^file:\/\//, ""), "write", "omarain.json"]
+    command: root.helperCmd(["write", "omarain.json"])
     onStarted: {
       write(pending)
       stdinEnabled = false
+    }
+  }
+
+  Process {
+    id: stateRead
+    command: root.helperCmd(["read", "omarain.json"])
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.applyStateText(String(text || ""))
     }
   }
 
@@ -284,6 +301,25 @@ Panel {
     blockAllReads: true
     watchChanges: true
     printErrors: false
+    onFileChanged: {
+      stateRead.running = false
+      stateRead.running = true
+    }
+  }
+
+  function applyStateText(raw) {
+    var next = RainModel.parseStateFile(raw)
+    root.mode = next.mode
+    root.speed = next.speed
+    root.look = next.look
+    root.script = next.script
+    root.resumeMode = next.resumeMode
+    root.intensity = next.intensity
+    if (next.weatherCode != null) root.weatherCode = next.weatherCode
+    if (!(root.cursorActive && root.focusSection === "speed"))
+      root.speedIndex = RainModel.speedChipIndex(next.speed)
+    if (!(root.cursorActive && root.focusSection === "look"))
+      root.lookIndex = root.selectedLookIndex()
   }
 
   function applyServiceState() {
@@ -320,7 +356,14 @@ Panel {
   }
 
   onOpenedChanged: {
-    if (opened) return
+    if (opened) {
+      applyServiceState()
+      stateRead.running = false
+      stateRead.running = true
+      speedIndex = selectedSpeedIndex()
+      lookIndex = selectedLookIndex()
+      return
+    }
     pageFlip.stop()
     helpOpen = false
     pendingHelpOpen = false
@@ -359,7 +402,10 @@ Panel {
 
   onSharedServiceChanged: applyServiceState()
 
-  Component.onCompleted: applyServiceState()
+  Component.onCompleted: {
+    applyServiceState()
+    stateRead.running = true
+  }
 
   BarIconButton {
     id: button
@@ -621,7 +667,7 @@ Panel {
                     horizontalPadding: Style.spacing.controlPaddingX
                     verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
                     bordered: true
-                    active: root.speed === modelData.value
+                    selected: root.displayedSpeed === modelData.value
                     hasCursor: root.cursorActive && root.focusSection === "speed" && root.speedIndex === index
                     onClicked: root.setSpeed(modelData.value)
                     onHovered: function(h) {
@@ -685,7 +731,7 @@ Panel {
                     horizontalPadding: Style.space(6)
                     verticalPadding: Style.spacing.controlPaddingY + Style.space(4)
                     bordered: true
-                    active: root.look === modelData.value
+                    selected: root.displayedLook === modelData.value
                     hasCursor: root.cursorActive && root.focusSection === "look" && root.lookIndex === index
                     onClicked: root.setLook(modelData.value)
                     onHovered: function(h) {
@@ -701,7 +747,7 @@ Panel {
                     anchors.fill: lookChip
                     anchors.margins: 2
                     look: modelData.value
-                    speed: root.speed
+                    speed: root.displayedSpeed
                     running: lookChip.hasCursor
                     foreground: root.foreground
                     accent: Color.accent

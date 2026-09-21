@@ -60,6 +60,18 @@ function speedOptions() {
   ]
 }
 
+function chipIndex(options, value) {
+  var list = options || []
+  for (var i = 0; i < list.length; i++) {
+    if (list[i] && list[i].value === value) return i
+  }
+  return 0
+}
+
+function speedChipIndex(speed) {
+  return chipIndex(speedOptions(), normalizeSpeed(speed))
+}
+
 function normalizeLook(value) {
   var look = String(value || "").replace(/^\s+|\s+$/g, "").toLowerCase()
   if (look === "candy") return "candy"
@@ -1318,6 +1330,7 @@ if (typeof module !== "undefined") {
     previewFallScale: previewFallScale,
     speedLabel: speedLabel,
     speedOptions: speedOptions,
+    speedChipIndex: speedChipIndex,
     normalizeLook: normalizeLook,
     lookLabel: lookLabel,
     lookOptions: lookOptions,
