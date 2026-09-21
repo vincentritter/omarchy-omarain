@@ -233,11 +233,7 @@ Item {
 
   function applyStateText(raw) {
     var next = RainModel.parseStateFile(raw)
-    var dirty = next.mode !== root.mode || next.speed !== root.speed || next.look !== root.look || next.script !== root.script
-    if (next.weatherCode != null && next.weatherCode !== root.weatherCode) {
-      root.weatherCode = next.weatherCode
-      dirty = true
-    }
+    if (next.weatherCode != null) root.weatherCode = next.weatherCode
     root.mode = next.mode
     root.speed = next.speed
     root.look = next.look
@@ -245,7 +241,7 @@ Item {
     root.resumeMode = next.resumeMode
     root.intensity = next.intensity
     root.modeLoaded = true
-    if (dirty) root.bumpConfig()
+    root.bumpConfig()
   }
 
   FileView {
@@ -282,7 +278,10 @@ Item {
       onStreamFinished: root.applyStateText(String(text || ""))
     }
     onExited: function(code) {
-      if (code !== 0) root.modeLoaded = true
+      if (code !== 0) {
+        root.modeLoaded = true
+        root.bumpConfig()
+      }
     }
   }
 
@@ -422,6 +421,7 @@ Item {
       }
 
       function syncSim() {
+        if (!root.modeLoaded) return
         if (width < 8 || height < 8) return
         if (!sim) {
           sim = RainModel.createState(width, height, {
@@ -448,11 +448,12 @@ Item {
 
       Connections {
         target: root
-        function onConfigTickChanged() { panel.applyConfig() }
-        function onModeChanged() { panel.applyConfig() }
-        function onSpeedChanged() { panel.applyConfig() }
-        function onLookChanged() { panel.applyConfig() }
-        function onScriptChanged() { panel.applyConfig() }
+        function onModeLoadedChanged() { panel.syncSim() }
+        function onConfigTickChanged() { panel.syncSim() }
+        function onModeChanged() { panel.syncSim() }
+        function onSpeedChanged() { panel.syncSim() }
+        function onLookChanged() { panel.syncSim() }
+        function onScriptChanged() { panel.syncSim() }
       }
 
       FrameAnimation {

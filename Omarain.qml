@@ -57,6 +57,29 @@ Panel {
     pageFlip.restart()
   }
 
+  function liveSnapshot() {
+    if (sharedService) {
+      return {
+        mode: RainModel.normalizeMode(sharedService.mode),
+        weatherCode: sharedService.weatherCode,
+        speed: RainModel.normalizeSpeed(sharedService.speed),
+        look: RainModel.normalizeLook(sharedService.look),
+        script: RainModel.normalizeScript(sharedService.script),
+        resumeMode: RainModel.normalizeMode(sharedService.resumeMode),
+        intensity: RainModel.normalizeIntensity(sharedService.intensity)
+      }
+    }
+    return {
+      mode: root.mode,
+      weatherCode: root.weatherCode,
+      speed: root.speed,
+      look: root.look,
+      script: root.script,
+      resumeMode: root.resumeMode,
+      intensity: root.intensity
+    }
+  }
+
   function persistMerged(merged) {
     root.mode = merged.mode
     root.speed = merged.speed
@@ -95,60 +118,68 @@ Panel {
   }
 
   function currentStateText() {
-    return RainModel.stateFileBody(root.mode, root.weatherCode, root.speed, root.look, root.script, root.resumeMode, root.intensity)
+    var s = liveSnapshot()
+    return RainModel.stateFileBody(s.mode, s.weatherCode, s.speed, s.look, s.script, s.resumeMode, s.intensity)
   }
 
   function setMode(next) {
-    var merged = RainModel.mergeState(currentStateText(), next, root.weatherCode, root.speed, root.look, root.script, root.resumeMode, root.intensity)
+    var s = liveSnapshot()
+    var merged = RainModel.mergeState(currentStateText(), next, s.weatherCode, s.speed, s.look, s.script, s.resumeMode, s.intensity)
     persistMerged(merged)
   }
 
   function setFollowWeather(follow) {
+    var s = liveSnapshot()
     var applied = RainModel.applyFollowWeather({
-      mode: root.mode,
-      intensity: root.intensity,
-      resumeMode: root.resumeMode
+      mode: s.mode,
+      intensity: s.intensity,
+      resumeMode: s.resumeMode
     }, follow)
-    var merged = RainModel.mergeState(currentStateText(), applied.mode, root.weatherCode, root.speed, root.look, root.script, applied.resumeMode, applied.intensity)
+    var merged = RainModel.mergeState(currentStateText(), applied.mode, s.weatherCode, s.speed, s.look, s.script, applied.resumeMode, applied.intensity)
     persistMerged(merged)
   }
 
   function setIntensity(next) {
+    var s = liveSnapshot()
     var applied = RainModel.applyIntensityChoice({
-      mode: root.mode,
-      intensity: root.intensity,
-      resumeMode: root.resumeMode
+      mode: s.mode,
+      intensity: s.intensity,
+      resumeMode: s.resumeMode
     }, next)
-    var merged = RainModel.mergeState(currentStateText(), applied.mode, root.weatherCode, root.speed, root.look, root.script, applied.resumeMode, applied.intensity)
+    var merged = RainModel.mergeState(currentStateText(), applied.mode, s.weatherCode, s.speed, s.look, s.script, applied.resumeMode, applied.intensity)
     persistMerged(merged)
   }
 
   function setSpeed(next) {
-    var merged = RainModel.mergeState(currentStateText(), root.mode, root.weatherCode, next, root.look, root.script, root.resumeMode, root.intensity)
+    var s = liveSnapshot()
+    var merged = RainModel.mergeState(currentStateText(), s.mode, s.weatherCode, next, s.look, s.script, s.resumeMode, s.intensity)
     persistMerged(merged)
   }
 
   function setLook(next) {
+    var s = liveSnapshot()
     var look = RainModel.normalizeLook(next)
-    var script = root.script
-    if (look === "matrix" && root.look !== "matrix") script = "glyphs"
-    var merged = RainModel.mergeState(currentStateText(), root.mode, root.weatherCode, root.speed, look, script, root.resumeMode, root.intensity)
+    var script = s.script
+    if (look === "matrix" && s.look !== "matrix") script = "glyphs"
+    var merged = RainModel.mergeState(currentStateText(), s.mode, s.weatherCode, s.speed, look, script, s.resumeMode, s.intensity)
     persistMerged(merged)
   }
 
   function setGlyphs(on) {
-    if (root.look !== "matrix") return
-    var merged = RainModel.mergeState(currentStateText(), root.mode, root.weatherCode, root.speed, "matrix", on ? "glyphs" : "pixels", root.resumeMode, root.intensity)
+    var s = liveSnapshot()
+    if (s.look !== "matrix") return
+    var merged = RainModel.mergeState(currentStateText(), s.mode, s.weatherCode, s.speed, "matrix", on ? "glyphs" : "pixels", s.resumeMode, s.intensity)
     persistMerged(merged)
   }
 
   function cycleMode() {
-    setMode(RainModel.cycleMode(mode))
+    setMode(RainModel.cycleMode(liveSnapshot().mode))
   }
 
   function toggleRain() {
-    var next = RainModel.toggleOnOff(root.mode, root.resumeMode)
-    var merged = RainModel.mergeState(currentStateText(), next.mode, root.weatherCode, root.speed, root.look, root.script, next.resumeMode, root.intensity)
+    var s = liveSnapshot()
+    var next = RainModel.toggleOnOff(s.mode, s.resumeMode)
+    var merged = RainModel.mergeState(currentStateText(), next.mode, s.weatherCode, s.speed, s.look, s.script, next.resumeMode, s.intensity)
     persistMerged(merged)
   }
 
@@ -255,41 +286,37 @@ Panel {
     printErrors: false
   }
 
+  function applyServiceState() {
+    if (!sharedService) return
+    root.mode = RainModel.normalizeMode(sharedService.mode)
+    root.weatherCode = sharedService.weatherCode
+    root.speed = RainModel.normalizeSpeed(sharedService.speed)
+    root.look = RainModel.normalizeLook(sharedService.look)
+    root.script = RainModel.normalizeScript(sharedService.script)
+    root.resumeMode = RainModel.normalizeMode(sharedService.resumeMode)
+    root.intensity = RainModel.normalizeIntensity(sharedService.intensity)
+    if (!root.opened) {
+      root.speedIndex = root.selectedSpeedIndex()
+      root.lookIndex = root.selectedLookIndex()
+    }
+  }
+
   Connections {
     target: sharedService
-    function onModeChanged() {
-      if (!sharedService) return
-      root.mode = RainModel.normalizeMode(sharedService.mode)
-    }
-    function onWeatherCodeChanged() {
-      if (sharedService) root.weatherCode = sharedService.weatherCode
-    }
-    function onSpeedChanged() {
-      if (!sharedService) return
-      root.speed = RainModel.normalizeSpeed(sharedService.speed)
-      if (!root.opened) root.speedIndex = root.selectedSpeedIndex()
-    }
-    function onLookChanged() {
-      if (!sharedService) return
-      root.look = RainModel.normalizeLook(sharedService.look)
-      if (!root.opened) root.lookIndex = root.selectedLookIndex()
-    }
+    function onModeChanged() { root.applyServiceState() }
+    function onWeatherCodeChanged() { root.applyServiceState() }
+    function onSpeedChanged() { root.applyServiceState() }
+    function onLookChanged() { root.applyServiceState() }
+    function onScriptChanged() { root.applyServiceState() }
+    function onResumeModeChanged() { root.applyServiceState() }
+    function onIntensityChanged() { root.applyServiceState() }
   }
 
   Timer {
     interval: 2000
     running: sharedService !== null
     repeat: true
-    onTriggered: {
-      var next = RainModel.normalizeMode(sharedService.mode)
-      if (next !== root.mode) root.mode = next
-      root.weatherCode = sharedService.weatherCode
-      root.speed = RainModel.normalizeSpeed(sharedService.speed)
-      root.look = RainModel.normalizeLook(sharedService.look)
-      root.script = RainModel.normalizeScript(sharedService.script)
-      root.resumeMode = RainModel.normalizeMode(sharedService.resumeMode)
-      root.intensity = RainModel.normalizeIntensity(sharedService.intensity)
-    }
+    onTriggered: root.applyServiceState()
   }
 
   onOpenedChanged: {
@@ -330,19 +357,9 @@ Panel {
     }
   }
 
-  Component.onCompleted: {
-    if (sharedService) {
-      mode = RainModel.normalizeMode(sharedService.mode)
-      weatherCode = sharedService.weatherCode
-      speed = RainModel.normalizeSpeed(sharedService.speed)
-      look = RainModel.normalizeLook(sharedService.look)
-      script = RainModel.normalizeScript(sharedService.script)
-      resumeMode = RainModel.normalizeMode(sharedService.resumeMode)
-      intensity = RainModel.normalizeIntensity(sharedService.intensity)
-      speedIndex = selectedSpeedIndex()
-      lookIndex = selectedLookIndex()
-    }
-  }
+  onSharedServiceChanged: applyServiceState()
+
+  Component.onCompleted: applyServiceState()
 
   BarIconButton {
     id: button

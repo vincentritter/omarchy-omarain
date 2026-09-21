@@ -805,6 +805,27 @@ test("changing speed does not affect drops already falling", () => {
   assert.ok(drop.y - y < 20)
 })
 
+test("a field created from a saved state file already falls at the saved speed", () => {
+  const saved = RainModel.parseStateFile('{"mode":"steady","speed":"natural"}')
+  const calm = RainModel.createState(800, 400, { seed: 6, pixel: 4, mode: "steady", speed: "calm" })
+  const restored = RainModel.createState(800, 400, {
+    seed: 6,
+    pixel: 4,
+    mode: saved.mode,
+    speed: saved.speed,
+    look: saved.look,
+    script: saved.script
+  })
+  assert.equal(saved.speed, "natural")
+  assert.equal(restored.speed, "natural")
+  const calmNear = ofKind(calm, "drop").filter(function (drop) { return drop.layer === 2 })
+  const naturalNear = ofKind(restored, "drop").filter(function (drop) { return drop.layer === 2 })
+  assert.ok(calmNear.length > 0)
+  assert.ok(naturalNear.length > 0)
+  assert.equal(naturalNear[0].speedScale, RainModel.speedScale("natural"))
+  assert.ok(naturalNear[0].vy > calmNear[0].vy)
+})
+
 test("spawned hyper drops are faster than calm drops on the same layer", () => {
   const calm = RainModel.createState(800, 400, { seed: 6, pixel: 4, mode: "steady", speed: "calm" })
   const hyper = RainModel.createState(800, 400, { seed: 6, pixel: 4, mode: "steady", speed: "hyper" })
