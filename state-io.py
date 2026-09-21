@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 MAX_BYTES = 65536
 MAX_TILT = 256
+USER_AGENT = "Omarain/1.0"
 _COMPONENT = re.compile(r"[A-Za-z0-9._-]+")
 ALLOWED_FETCH = {
     "api.open-meteo.com",
@@ -136,7 +137,7 @@ class SameHostRedirect(urllib.request.HTTPRedirectHandler):
         )
 
 
-def fetch(url):
+def fetch_request(url):
     parsed = urlparse(url)
     if parsed.scheme != "https" or parsed.username or parsed.password:
         raise PermissionError("refusing url")
@@ -146,6 +147,12 @@ def fetch(url):
     if parsed.port not in (None, 443):
         raise PermissionError("refusing port")
     req = urllib.request.Request(url, method="GET")
+    req.add_header("User-Agent", USER_AGENT)
+    return req
+
+
+def fetch(url):
+    req = fetch_request(url)
     ctx = ssl.create_default_context()
     opener = urllib.request.build_opener(
         SameHostRedirect,

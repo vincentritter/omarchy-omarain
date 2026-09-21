@@ -366,6 +366,69 @@ test("Open-Meteo and wttr payloads yield precipitation", () => {
   assert.equal(RainModel.precipitationFromPayload(""), null)
 })
 
+test("auto uses this hour when the current snapshot is dry", () => {
+  const picked = RainModel.autoWeatherFromPayload(JSON.stringify({
+    current: { time: "2026-09-21T12:30", weather_code: 3, precipitation: 0 },
+    hourly: {
+      time: ["2026-09-21T11:00", "2026-09-21T12:00", "2026-09-21T13:00", "2026-09-21T16:00"],
+      weather_code: [51, 51, 3, 63],
+      precipitation: [0.2, 0.3, 0, 4.0]
+    }
+  }))
+  assert.equal(picked.weatherCode, 51)
+  assert.equal(picked.precipitation, 0.3)
+  assert.ok(RainModel.resolveIntensity("auto", picked.weatherCode, 0, picked.precipitation) > 0)
+})
+
+test("auto prefers current precipitation over this hour", () => {
+  const picked = RainModel.autoWeatherFromPayload(JSON.stringify({
+    current: { time: "2026-09-21T12:30", weather_code: 61, precipitation: 1.2 },
+    hourly: {
+      time: ["2026-09-21T12:00"],
+      weather_code: [51],
+      precipitation: [0.3]
+    }
+  }))
+  assert.equal(picked.weatherCode, 61)
+  assert.equal(picked.precipitation, 1.2)
+})
+
+test("auto stays dry when this hour is dry even if later hours are wet", () => {
+  const picked = RainModel.autoWeatherFromPayload(JSON.stringify({
+    current: { time: "2026-09-21T13:15", weather_code: 3, precipitation: 0 },
+    hourly: {
+      time: ["2026-09-21T12:00", "2026-09-21T13:00", "2026-09-21T16:00"],
+      weather_code: [51, 3, 63],
+      precipitation: [0.3, 0, 4.0]
+    }
+  }))
+  assert.equal(picked.weatherCode, 3)
+  assert.equal(picked.precipitation, 0)
+  assert.equal(RainModel.resolveIntensity("auto", picked.weatherCode, 0, picked.precipitation), 0)
+})
+
+test("auto ignores this hour when precipitation is wet but the code is dry", () => {
+  const picked = RainModel.autoWeatherFromPayload(JSON.stringify({
+    current: { time: "2026-09-21T12:30", weather_code: 3, precipitation: 0 },
+    hourly: {
+      time: ["2026-09-21T12:00"],
+      weather_code: [3],
+      precipitation: [0.3]
+    }
+  }))
+  assert.equal(picked.weatherCode, 3)
+  assert.equal(picked.precipitation, 0)
+})
+
+test("auto falls back to current when hourly is missing", () => {
+  const picked = RainModel.autoWeatherFromPayload(JSON.stringify({
+    current: { time: "2026-09-21T12:30", weather_code: 3, precipitation: 0 }
+  }))
+  assert.equal(picked.weatherCode, 3)
+  assert.equal(picked.precipitation, 0)
+  assert.equal(RainModel.autoWeatherFromPayload("").weatherCode, null)
+})
+
 test("a wttr payload yields coordinates so auto can follow up with Open-Meteo", () => {
   const loc = RainModel.locationFromWttrPayload(JSON.stringify({
     nearest_area: [{ areaName: [{ value: "Polesie" }], latitude: "52.017", longitude: "20.017" }],
@@ -767,6 +830,7 @@ test("forecast URL prefers Open-Meteo when coordinates exist", () => {
   assert.ok(coords.indexOf("50.06") !== -1)
   assert.ok(coords.indexOf("wind_speed_10m") !== -1)
   assert.ok(coords.indexOf("precipitation") !== -1)
+  assert.ok(coords.indexOf("hourly=weather_code,precipitation") !== -1)
   assert.equal(RainModel.forecastUrl({ name: "Krakow" }), "")
   assert.equal(RainModel.forecastUrl({}), "")
 })

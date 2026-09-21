@@ -346,6 +346,71 @@ function precipitationFromPayload(raw) {
   }
 }
 
+function hourStamp(iso) {
+  var text = String(iso || "")
+  var match = text.match(/^(\d{4}-\d{2}-\d{2}T\d{2})/)
+  if (!match) return ""
+  return match[1] + ":00"
+}
+
+function hourlySlotFromPayload(raw) {
+  var text = String(raw || "").replace(/^\s+|\s+$/g, "")
+  if (!text) return null
+  try {
+    var data = boundedJson(text, 65536)
+    if (!data || !data.current || !data.hourly) return null
+    var stamp = hourStamp(data.current.time)
+    if (!stamp) return null
+    var times = data.hourly.time
+    if (!times || !times.length) return null
+    var codes = data.hourly.weather_code
+    var precips = data.hourly.precipitation
+    for (var i = 0; i < times.length; i++) {
+      if (hourStamp(times[i]) !== stamp) continue
+      var code = codes && codes[i] != null ? Number(codes[i]) : null
+      var precip = precips && precips[i] != null ? Number(precips[i]) : null
+      return {
+        weatherCode: isFinite(code) ? code : null,
+        precipitation: isFinite(precip) ? precip : null
+      }
+    }
+    return null
+  } catch (e) {
+    return null
+  }
+}
+
+function pickAutoWeather(currentCode, currentPrecip, hourCode, hourPrecip) {
+  var curP = currentPrecip == null || currentPrecip === "" ? NaN : Number(currentPrecip)
+  var hourP = hourPrecip == null || hourPrecip === "" ? NaN : Number(hourPrecip)
+  var curC = currentCode == null || currentCode === "" ? NaN : Number(currentCode)
+  var hourC = hourCode == null || hourCode === "" ? NaN : Number(hourCode)
+  if (isFinite(curP) && curP > 0)
+    return {
+      weatherCode: isFinite(curC) ? curC : null,
+      precipitation: curP
+    }
+  if (isFinite(hourP) && hourP > 0 && weatherTint(hourC) > 0)
+    return {
+      weatherCode: hourC,
+      precipitation: hourP
+    }
+  return {
+    weatherCode: isFinite(curC) ? curC : null,
+    precipitation: isFinite(curP) ? curP : null
+  }
+}
+
+function autoWeatherFromPayload(raw) {
+  var hour = hourlySlotFromPayload(raw)
+  return pickAutoWeather(
+    weatherCodeFromPayload(raw),
+    precipitationFromPayload(raw),
+    hour ? hour.weatherCode : null,
+    hour ? hour.precipitation : null
+  )
+}
+
 function coordsFrom(latitude, longitude, name) {
   var lat = parseFloat(latitude)
   var lon = parseFloat(longitude)
@@ -679,6 +744,7 @@ function forecastUrl(location) {
     + "?latitude=" + encodeURIComponent(String(lat))
     + "&longitude=" + encodeURIComponent(String(lon))
     + "&current=weather_code,wind_speed_10m,wind_direction_10m,precipitation"
+    + "&hourly=weather_code,precipitation"
     + "&forecast_days=1"
     + "&timezone=auto"
 }
@@ -1267,6 +1333,7 @@ if (typeof module !== "undefined") {
     configure: configure,
     weatherCodeFromPayload: weatherCodeFromPayload,
     precipitationFromPayload: precipitationFromPayload,
+    autoWeatherFromPayload: autoWeatherFromPayload,
     locationFromWttrPayload: locationFromWttrPayload,
     locationFromLocatePayload: locationFromLocatePayload,
     windXFromPayload: windXFromPayload,

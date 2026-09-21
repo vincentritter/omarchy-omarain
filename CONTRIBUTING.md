@@ -14,11 +14,12 @@ The live copy Omarchy loads is `~/.config/omarchy/plugins/vincentritter.omarain`
 
 ```bash
 node --test RainModel.test.js
+python3 state-io.test.py
 ```
 
 A new decision (mode, intensity, follow weather, look, speed, weather URLs, precipitation) belongs in `RainModel.js` with a test that fails if that decision flips. QML is not unit-tested. Prove UI by using it in the running shell.
 
-Follow weather rains only on current precipitation at the weather widget's location, not a wet outlook. Open-Meteo is the first weather source. Last manual intensity is a separate persisted field; hide the intensity slider while Follow weather is on. The mixed neon look is `candy`. Unknown looks, including `psychedelic`, normalize to theme. Chip hover rain uses `previewFallScale`, not the sim `speedScale`.
+Follow weather rains on current precipitation at the weather widget's location, or this hour's Open-Meteo slot when the current snapshot is dry. Later hours stay unused. Open-Meteo is the first weather source. Last manual intensity is a separate persisted field; hide the intensity slider while Follow weather is on. The mixed neon look is `candy`. Unknown looks, including `psychedelic`, normalize to theme. Chip hover rain uses `previewFallScale`, not the sim `speedScale`.
 
 ## UI
 

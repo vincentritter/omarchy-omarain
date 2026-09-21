@@ -12,7 +12,7 @@ If the machine exposes an accelerometer (IIO or Apple SMC `position`), tilting t
 
 Left-click the bar icon to open the panel. The switch turns rain off and on, restoring the last mode. Right-click the icon to do the same without opening the panel.
 
-Follow weather rains at the weather widget's location while it is raining outside. If that location is missing, Omarain asks geojs for an IP location, then Open-Meteo for the current conditions. The panel also sets intensity, speed, and look. Candy is mixed neon; Matrix can fall as glyphs.
+Follow weather rains at the weather widget's location while it is raining outside. Open-Meteo supplies the current snapshot, and this hour if that snapshot is already dry. If the location is missing, Omarain asks geojs for an IP location, then Open-Meteo. The panel also sets intensity, speed, and look. Candy is mixed neon; Matrix can fall as glyphs.
 
 ![Omarain panel](preview.png)
 
@@ -44,6 +44,7 @@ From the checkout:
 
 ```bash
 node --test RainModel.test.js
+python3 state-io.test.py
 ```
 
 Omarain is [MIT](LICENSE) licensed. It needs Omarchy. State, weather, and tilt use Python 3.

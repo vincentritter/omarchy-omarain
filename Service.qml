@@ -198,8 +198,9 @@ Item {
       root.refreshWeather()
       return
     }
-    var code = RainModel.weatherCodeFromPayload(raw)
-    var precip = RainModel.precipitationFromPayload(raw)
+    var picked = RainModel.autoWeatherFromPayload(raw)
+    var code = picked.weatherCode
+    var precip = picked.precipitation
     var windX = RainModel.windXFromPayload(raw)
     var dirty = false
     if (code !== root.weatherCode) {
